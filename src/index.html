@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- The API key lives in localStorage, so the page is locked down: scripts and
+       styles from this site only, network calls to OpenRouter only (ADR-0001). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://openrouter.ai; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>Harness</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231f7a7a'/%3E%3Cpath d='M10 9v14M22 9v14M10 16h12' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar" aria-label="Conversations">
+      <div class="sidebar-head">
+        <span class="brand">harness</span>
+        <button type="button" class="btn" id="new-chat">New chat</button>
+      </div>
+      <nav class="conv-list" id="conversations"></nav>
+      <div class="sidebar-foot">
+        <button type="button" class="btn quiet" id="open-settings">Settings</button>
+        <p class="fineprint">Saved in this browser only.</p>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button type="button" class="icon-btn" id="toggle-sidebar" aria-label="Show conversations">
+          <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+        <h1 id="chat-title">New chat</h1>
+        <label class="model">
+          <span class="sr-only">Model</span>
+          <input id="model" list="model-list" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="openrouter/auto">
+        </label>
+        <datalist id="model-list"></datalist>
+      </header>
+
+      <div class="notice" id="notice" role="status" hidden>
+        <span id="notice-text"></span>
+        <button type="button" class="link-btn" id="notice-close">Dismiss</button>
+      </div>
+
+      <section class="messages" id="messages" aria-label="Conversation" tabindex="-1"></section>
+
+      <form class="composer" id="composer">
+        <div class="composer-box">
+          <textarea id="input" rows="1" placeholder="Message" aria-label="Message" autofocus></textarea>
+          <button type="submit" class="send" id="send" aria-label="Send" disabled>
+            <svg class="icon-send" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M10 16V4M5 9l5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg class="icon-stop" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="2" fill="currentColor"/></svg>
+          </button>
+        </div>
+        <p class="fineprint">Enter to send · Shift + Enter for a new line</p>
+      </form>
+    </main>
+  </div>
+
+  <dialog class="dialog" id="settings" aria-labelledby="settings-title">
+    <form id="settings-form">
+      <h2 id="settings-title">Settings</h2>
+
+      <label class="field">
+        <span class="field-label">OpenRouter API key</span>
+        <span class="field-row">
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-…">
+          <button type="button" class="btn quiet" id="toggle-key">Show</button>
+        </span>
+        <span class="field-help">Kept in this browser and sent only to openrouter.ai. Get one at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>.</span>
+      </label>
+
+      <label class="field">
+        <span class="field-label">System prompt <span class="optional">optional</span></span>
+        <textarea id="system-prompt" rows="4" placeholder="How the model should behave in every conversation."></textarea>
+      </label>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn danger" id="clear-all">Delete all conversations</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn quiet" id="cancel-settings">Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <noscript><p class="noscript">This page needs JavaScript: it talks to OpenRouter directly from your browser.</p></noscript>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "my-ai-harness",
+  "private": true,
+  "type": "module",
+  "description": "A static chat page for OpenRouter, served by GitHub Pages. No dependencies, no build step.",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "serve": "python3 -m http.server 8080 --directory src"
+  }
+}
