@@ -249,7 +249,7 @@ If the script was successfully used, append as comments how, and what the outcom
 A simple chat harness: one clean, static chat page, served by GitHub Pages, that calls OpenRouter straight from the browser with the visitor's own API key and keeps conversations in localStorage. This is the product repo — the page lives in `src/`, its tests in `tests/`; there is no server and no build step.
 
 ### Current focus:
-The first version of the chat page (ADR-0001) and its deployment to GitHub Pages. Open: QST-HARNESS-SCOPE — whether the model should also get tools.
+The first version of the chat page is live at https://prorick.github.io/my-AI-harness/ (ADR-0001). Still owed: one real conversation there with a real OpenRouter key. Next milestone, in its own ADR: tools, so the harness can do more than chat.
 
 ### Key decisions made:
 - Mission and architecture (static page, OpenRouter from the browser, localStorage, Pages via Actions publishing `src/`) — see `docs/adr/0001-*.md`
