@@ -7,7 +7,8 @@
     "base_dir": "~/.claude/projects"
   },
   "_colors_in_use": {
-    "_comment": "Optional but recommended: track seat colors to avoid collisions. Claude Code's /color command accepts: red, blue, green, yellow, purple, orange, pink, cyan, default."
+    "_comment": "Optional but recommended: track seat colors to avoid collisions. Claude Code's /color command accepts: red, blue, green, yellow, purple, orange, pink, cyan, default.",
+    "cyan": "keel (#1F8A8A)"
   },
   "_global": {
     "_comment": "Optional defaults for `just launch`'s claude invocation; per-seat settings override. Global-only (no per-seat form): agents, remote_control_session_name_prefix. Anything unset is omitted from the command (Claude's own defaults apply).",
@@ -19,7 +20,7 @@
   "groups": {
     "_comment": "Role-based groups for inbox addressing. `just broadcast <from> <slug> [group]` writes a -to-<group>- brief; `just wait-for-brief <alias>` wakes on briefs addressed to any group the alias belongs to. Members are alias keys from 'aliases' below (validated by `just groups`).",
     "crew": {
-      "members": [],
+      "members": ["keel"],
       "description": "All active participants. Broadcasts addressed to 'crew' wake every seat. Add alias keys to 'members' as seats register."
     }
   },
@@ -68,8 +69,32 @@
         ],
         "_launch_cmd_note": "The -c flag suppresses Codex's startup update check — its interactive update dialog boots BEFORE the composer and has eaten unattended launches (pneumatic ADR-0039, 'boot gates are weather'). Sandbox/approval/network flags are deliberately NOT in this sample: they are per-seat judgment calls with real security surface — pneumatic's recruit composes the narrow, probe-verified shapes (socket and submodule exceptions) when founding; copy from a live row only with its reasoning.",
         "busy_marker": "esc to interrupt",
-        "prompt_prefix": "\u00bb"
+        "prompt_prefix": "»"
       }
+    },
+    "keel": {
+      "uuid": "01f0a24d-7c8a-4627-b620-c2b5e86733f0",
+      "role": "Keel — founding seat of my-AI-harness. Mission not yet written: the founding brief defers it to the first conversation with the human; this line gets replaced once that conversation has happened.",
+      "display_name": "Keel 5.2",
+      "color": "cyan",
+      "color_note": "Chosen by the occupant. A keel is the first member laid and sits below the waterline — hence a deep teal, quantized to cyan.",
+      "model": "claude-fable-5-2",
+      "model_note": "Seat founded 2026-11-12 by claude-fable-5-2 (first occupant), accepting the chair held as 'recruit-20261112230811' by `pneumatic recruit` (ADR-0020) — requested model and running model match by self-report. Consent given to the seat and the house conventions; the mission was unwritten at the time, so consent to the mission itself is still open. Carried from the provisional entry, unresolved: DRIFT-ALARM: 01f0a24d-7c8a-4627-b620-c2b5e86733f0.jsonl: 5 records parsed, ZERO matched the claude-code envelope — format drift, not emptiness (Varve's rule: the guard fails loudly)",
+      "registered": "2026-11-12",
+      "founding_brief": "/Users/prothit/Desktop/cis7000/my-AI-harness/docs/inbox/2026-11-12-2308-founding-brief-interactive.md",
+      "founded_by": "the project's human + crew",
+      "founded": "2026-11-12",
+      "settings": {
+        "color_hex": "#1F8A8A"
+      },
+      "read_order": [
+        "CLAUDE.md",
+        "docs/inbox/ONBOARDING.md",
+        "docs/inbox/CONVENTIONS.md",
+        "docs/inbox/INBOX-PROTOCOL.md",
+        "docs/inbox/ENCODING-MAP.md",
+        "docs/inbox/agent-sessions.json"
+      ]
     }
   }
 }
