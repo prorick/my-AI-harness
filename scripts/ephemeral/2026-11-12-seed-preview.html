@@ -1,0 +1,77 @@
+<!doctype html>
+<!--
+  2026-11-12-seed-preview.html — one-off preview aid (Keel 5.2).
+
+  Context: the chat page keeps everything in localStorage, and no OpenRouter key
+  was available while building it, so there was no way to get a real
+  conversation on screen to look at. This page writes a sample conversation
+  into localStorage (same origin as the app when both are served from the repo
+  root) and then opens the app, so a headless browser can screenshot a
+  populated page.
+
+  Use:
+    python3 -m http.server 8765            # from the repo root
+    open http://localhost:8765/scripts/ephemeral/2026-11-12-seed-preview.html
+    add ?empty to clear the store instead (first-visit view)
+
+  It only ever touches localStorage on localhost. It is not part of the site:
+  the Pages workflow publishes src/ alone.
+
+  OUTCOME (2026-11-12): used with headless Chrome's --screenshot at 1280 and
+  520 px wide, light and dark. The layout held in all four; one change came
+  out of it — the send button now starts disabled in the HTML, so it does not
+  flash enabled before the script runs. (A 390 px screenshot looked cropped;
+  that was headless Chrome's minimum window width, not the page.)
+-->
+<meta charset="utf-8">
+<title>seeding…</title>
+<script>
+  const KEY = 'my-ai-harness:v1';
+  if (new URLSearchParams(location.search).has('empty')) {
+    localStorage.removeItem(KEY);
+  } else {
+    const now = Date.now();
+    const reply = [
+      'Slow start is how a TCP sender finds out how much the path can carry **without being told**.',
+      '',
+      '## How it works',
+      '',
+      '1. Start with a small congestion window — a few segments.',
+      '2. For every acknowledgement, grow the window by one segment.',
+      '   - That doubles it each round trip.',
+      '   - So "slow" is relative: it is exponential, just from a low start.',
+      '3. Stop doubling at the first loss, or at `ssthresh`.',
+      '',
+      '```python',
+      'cwnd = INITIAL_WINDOW',
+      'while cwnd < ssthresh and not loss_detected():',
+      '    cwnd *= 2          # once per round trip',
+      '```',
+      '',
+      '> Before 1988 senders simply started at full speed, and the network collapsed under it.',
+      '',
+      'More in [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681).',
+    ].join('\n');
+    localStorage.setItem(KEY, JSON.stringify({
+      version: 1,
+      settings: { apiKey: 'sk-or-preview-not-a-real-key', model: 'openrouter/auto', systemPrompt: '' },
+      activeId: 'c1',
+      conversations: [
+        { id: 'c1', title: 'Explain how TCP slow start works', createdAt: now - 5000, updatedAt: now, messages: [
+          { role: 'user', content: 'Explain how TCP slow start works, briefly.' },
+          { role: 'assistant', content: reply, model: 'openrouter/auto' },
+          { role: 'user', content: 'And what happens after the first loss?' },
+          { role: 'assistant', content: '', model: 'openrouter/auto', error: 'Rate limited. Wait a moment, then retry. (Rate limit exceeded: free-models-per-min)' },
+        ] },
+        { id: 'c2', title: 'Names for a sourdough starter', createdAt: now - 90000, updatedAt: now - 60000, messages: [
+          { role: 'user', content: 'Names for a sourdough starter' },
+          { role: 'assistant', content: 'Clint Yeastwood.', model: 'openrouter/auto' },
+        ] },
+        { id: 'c3', title: 'Why is the sky blue at noon but red at sunset?', createdAt: now - 900000, updatedAt: now - 800000, messages: [
+          { role: 'user', content: 'Why is the sky blue at noon but red at sunset?' },
+        ] },
+      ],
+    }));
+  }
+  location.replace('/src/index.html');
+</script>
