@@ -1,19 +1,9 @@
 # CLAUDE.md - Project Guidance
 
-> **Instantiating this template?** Placeholders look like ⟦THIS⟧ — fill-and-delete
-> each one (grep-proof on purpose; `just instantiate-check` reports which remain
-> and passes only when none do). Square-bracket text elsewhere is either a
-> per-document mold slot (filled at each mint, not at birth) or the frozen
-> dialogue placeholder `[Fill this in]` — never convert those. *(This note is
-> visible text, not an HTML comment, because the harness strips block comments
-> from the CLAUDE.md it serves at session start — a cold instantiator proved the
-> instructions were sitting exactly where their audience could not see them.
-> Delete this block when instantiation is done.)*
-
-- **Project**: ⟦PROJECT-NAME⟧
-- **Human**: ⟦HUMANS⟧
-- **AI**: ⟦AI-SEATS⟧ <!-- with the crew layer, the roster lives in docs/inbox/agent-sessions.json; name the coordinator seat here -->
-- **Last Updated**: ⟦LAST-UPDATED⟧
+- **Project**: my-AI-harness
+- **Human**: prorick
+- **AI**: Keel 5.2 (claude-fable-5-2) — founding seat and, for now, the only one; the roster lives in `docs/inbox/agent-sessions.json`
+- **Last Updated**: 2026-11-12
 
 ---
 
@@ -98,15 +88,15 @@ Tests should:
 **RUN THIS PROJECT'S VERIFICATION GATE BEFORE EVERY COMMIT**
 
 Before serving any change:
-1. Run the project's verification gate: ⟦VERIFICATION-GATE⟧ <!-- test suite, build, linter, or a combination; e.g. `npm test`, `uv run pytest`, `hugo && bin/check` -->
+1. Run the project's verification gate: `just gate` (placeholder check + crew-registry validation + the page's tests, `node --test "tests/*.test.js"`; needs Node 22 or later, no packages)
 2. Fix any failures before committing
 3. Never serve changes with a failing gate
 
-**Why**: ⟦GATE-WHY⟧ <!-- state what this project's gate actually catches — real classes of bug, real numbers if you have them. A directive that names a real gate gets followed; an unfollowable one teaches every seat that directives are decorative, and that lesson generalizes. -->
+**Why**: The page has no server and no build step, so the tests are the only check between an edit and what visitors get — and the same tests gate the GitHub Pages deploy (`.github/workflows/pages.yml`). They hold the three places a mistake costs a visitor something: the reply stream (text cut mid-character or mid-line by the network, provider errors that arrive mid-reply), the store (conversations lost to a bad save, an unreadable entry, or a full or blocked localStorage), and the markdown reader (a reply must never become markup — the API key sits in localStorage, so an injection hole is a key-theft hole). The gate does not open a browser; layout and the click-through flow are checked by hand or with the driver in `scripts/ephemeral/`.
 
 **Process**:
 ```bash
-⟦VERIFICATION-GATE⟧            # Must be green before commit
+just gate                      # Must be green before commit
 git add <explicit paths>       # never -A: stage by path, commit by pathspec — see CONVENTIONS.md, shared-worktree awareness
 git commit -m "..." -- <paths>
 ```
@@ -256,13 +246,13 @@ If the script was successfully used, append as comments how, and what the outcom
 ## Project Context
 
 ### What we're building:
-⟦PROJECT-GOAL⟧ <!-- 1-3 sentences; same token as ONBOARDING's — one text serves both -->
+A simple chat harness: one clean, static chat page, served by GitHub Pages, that calls OpenRouter straight from the browser with the visitor's own API key and keeps conversations in localStorage. This is the product repo — the page lives in `src/`, its tests in `tests/`; there is no server and no build step.
 
 ### Current focus:
-⟦CURRENT-FOCUS⟧
+The first version of the chat page (ADR-0001) and its deployment to GitHub Pages. Open: QST-HARNESS-SCOPE — whether the model should also get tools.
 
 ### Key decisions made:
-*(List ADRs here as they land, e.g. `- Auth approach — see docs/adr/0001-*.md`. Empty at birth is healthy.)*
+- Mission and architecture (static page, OpenRouter from the browser, localStorage, Pages via Actions publishing `src/`) — see `docs/adr/0001-*.md`
 
 ### Open questions:
 ```bash
@@ -403,6 +393,8 @@ If context window fills mid-work, create `docs/HANDOFF-datetime.md`:
 
 *(Anything specific to this project that doesn't fit above. Empty at birth is healthy. One standing note: the Prime Directive's corollary means **direct commits to `main` are expected** here — substrate commits never wait for a branch or a prompt, which deliberately overrides harness defaults that say otherwise.)*
 
+- **The page's safety rules** (ADR-0001 — the API key lives in localStorage): no inline scripts or styles, no third-party hosts (the Content-Security-Policy in `src/index.html` allows this site and `openrouter.ai` only), and model output reaches the DOM only as text nodes — never `innerHTML`. A change that needs to loosen any of these needs an ADR first.
+- **Run it locally**: `npm run serve`, then open `http://localhost:8080`. Only `src/` is published.
 - It's possible the user uses `asdf` for Node.js and Python and the runtime of most languages. You can `source .claude/agent.env` before calling the runtimes, like `python` or `node` to access them through `asdf`'s shims. See: https://asdf-vm.com/manage/configuration.html
 
 ---

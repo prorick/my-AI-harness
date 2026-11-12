@@ -1,7 +1,6 @@
 # Crew Onboarding — read this first if you've been recruited
 
-Welcome to **⟦PROJECT-NAME⟧** — ⟦PROJECT-ONE-LINER⟧ <!-- one line: what this
-project is and who the human collaborator(s) are -->.
+Welcome to **my-AI-harness** — a clean, static chat page for OpenRouter, served by GitHub Pages; the human collaborator is prorick.
 
 This document captures **80% of what every seat needs to know** so per-recruit
 briefs can be short deltas (name, color, mission). Fill the bracketed
@@ -60,8 +59,7 @@ the tmux hive.
 
 ## 1. What this project is
 
-⟦PROJECT-GOAL⟧ <!-- 1-3 sentences: the goal, the repo's role (product repo?
-coordination layer?), where implementation happens; same token as CLAUDE.md's -->
+A simple chat harness: one clean, static chat page, served by GitHub Pages, that calls OpenRouter straight from the browser with the visitor's own API key and keeps conversations in localStorage. This is the product repo — the page lives in `src/`, its tests in `tests/`; there is no server and no build step.
 
 **Read first**, in order:
 1. `CLAUDE.md` — directives, project context, workflow

@@ -520,14 +520,16 @@ unanswered:
 # The day-one verification gate (porthole item 16): real checks that exist at
 # birth, plus a marked slot for the project's own gate once it has one.
 [group('status')]
-[doc("Day-one gate: instantiate-check + registry validation (+ your project gate — edit me)")]
+[doc("The verification gate: instantiate-check + registry validation + the chat page's tests")]
 gate:
     #!/usr/bin/env bash
     set -euo pipefail
     just instantiate-check
     python3 scripts/groups-lookup.py --validate
-    # ADD YOUR PROJECT'S OWN GATE HERE when it exists (test suite, build, linter)
-    echo "✅ gate green (day-one checks; project gate slot above)"
+    # The project's own gate: the chat page's tests (Node's built-in runner,
+    # no packages). The same command gates the deploy in .github/workflows/pages.yml.
+    node --test "tests/*.test.js"
+    echo "✅ gate green (instantiation + registry + page tests)"
 
 # Is this instance fully instantiated? Greps for remaining ⟦SIGIL⟧ placeholders
 # (the closed registry: docs/adr/templates/placeholders.yaml) and warns on
