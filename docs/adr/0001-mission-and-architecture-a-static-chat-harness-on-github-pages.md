@@ -52,7 +52,7 @@ adr teaching map: the example is not the teaching — these are the up-links fro
 ## Questions
 
 ### QST-HARNESS-SCOPE: Does "harness" mean a chat client only, or should the model also be able to use tools?
-- Status: unanswered
+- Status: answered
 - Why asking: "Harness" usually means the loop around a model that lets it call tools and act on the results; the dump describes only a chat page. The first version is chat only. If tools are wanted, the message format, the storage schema, and the streaming code all grow, and it is cheaper to know before more is built on the chat-only shape.
 - Need: pick a letter (or override — any shape answers)
 
@@ -65,13 +65,13 @@ Options:
 
 **C — chat now, tools as the next milestone.** *Rationale*: the dump lists four constraints and none mentions tools, so A is the literal reading; but the word "harness" and the course setting (`cis7000`) make B a plausible intent, and B is a superset that reuses A's streaming and storage (`src/js/openrouter.js`, `src/js/store.js`). *Confidence*: 0.6 — because the guess about intent rests on one word and a directory name; I have not seen the assignment. *If wrong*: if the course deliverable requires tool use, this flips to B and the tools ADR comes first; if the page is only ever meant to chat, it flips to A and no follow-up is owed.
 
-**ANS:** (by [name])
-[Fill this in]   <!-- literal placeholder — parser-significant, do not paraphrase -->
+**ANS:** (by ⟦HUMAN-NAME⟧)
+C. Let's go with C for now, chat should work, but make sure we can build on top of it so we can add tools so the harness is useful.
 
 ---
 
 ### QST-PAGES-SOURCE: Which GitHub Pages publishing mode — an Actions workflow that publishes `src/`, or "deploy from branch"?
-- Status: unanswered
+- Status: answered
 - Why asking: Both are "GitHub Pages only". The repo also holds ADRs, the inbox, and the crew registry, and the mode decides whether those get published alongside the chat page. The first version is laid out for option A; switching later means moving files or changing one setting.
 - Need: pick a letter (or override — any shape answers)
 
@@ -84,8 +84,9 @@ Options:
 
 **A — Actions workflow publishing `src/`.** *Rationale*: it is the only mode that publishes the app and nothing else, and the only one where the gate (`just gate`) also guards the live site; `docs/` is already taken by the method's own files, which rules out C without a reshuffle. *Confidence*: 0.8 — because the workflow is written but has not run yet (nothing is pushed), and the action versions in it are the ones I know, not ones I checked today. *If wrong*: if Actions is unavailable on this account or the workflow cannot be made to pass, this flips to B.
 
-**ANS:** (by [name])
-[Fill this in]   <!-- literal placeholder — parser-significant, do not paraphrase -->
+**ANS:** (by ⟦HUMAN-NAME⟧)
+Use A if you can. Just make sure that my website link still works: https://prorick.github.io/
+If not go with B.
 
 ---
 

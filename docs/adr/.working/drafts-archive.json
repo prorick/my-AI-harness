@@ -1,0 +1,37 @@
+[
+  {
+    "key": "prorick-my-ai-harness:1::e5b8471c0186::0",
+    "adrPath": "docs/adr/0001-mission-and-architecture-a-static-chat-harness-on-github-pages.md",
+    "adrNumber": 1,
+    "questionText": "Which GitHub Pages publishing mode — an Actions workflow that publishes `src/`, or \"deploy from branch\"?",
+    "draftText": "Use A if you can. Just make sure that my website link still works: https://prorick.github.io/\nIf not go with B. ",
+    "updatedAt": "2026-11-12T23:28:31.571Z",
+    "history": [
+      "Use A if you can. Just make sure that the ",
+      "Use A if you can. Just make sure that my website link still works: https://prorick.github.io/",
+      "Use A if you can. Just make sure that my website link still works: https://prorick.github.io/\n",
+      "Use A if you can. Just make sure that my website link still works: https://prorick.github.io/\n\n",
+      "Use A if you can. Just make sure that my website link still works: https://prorick.github.io/\n"
+    ],
+    "totalOccurrences": 1,
+    "source": "panel",
+    "archivedAt": "2026-11-12T23:28:34.220Z",
+    "reason": "promoted"
+  },
+  {
+    "key": "prorick-my-ai-harness:1::6ea1c512fe81::0",
+    "adrPath": "docs/adr/0001-mission-and-architecture-a-static-chat-harness-on-github-pages.md",
+    "adrNumber": 1,
+    "questionText": "Does \"harness\" mean a chat client only, or should the model also be able to use tools?",
+    "draftText": "C. Let's go with C for now, chat should work, but make sure we can build on top of it so we can add tools so the harness is useful. ",
+    "updatedAt": "2026-11-12T23:29:32.111Z",
+    "history": [
+      "C ",
+      "C. Let's go with C for now,"
+    ],
+    "totalOccurrences": 1,
+    "source": "panel",
+    "archivedAt": "2026-11-12T23:29:33.049Z",
+    "reason": "promoted"
+  }
+]
