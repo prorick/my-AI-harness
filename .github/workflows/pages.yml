@@ -5,6 +5,10 @@
 # This is a project site: it lives at https://<user>.github.io/my-AI-harness/ and
 # does not touch the account's own site at https://<user>.github.io/.
 
+# Action versions are the current majors as of 2026-11-12 (looked up with
+# `gh api repos/actions/<name>/releases/latest`). The first deploy ran on
+# v4/v5/v3/v4 and passed, with a "Node.js 20 is deprecated" warning on each.
+
 name: Deploy chat page to GitHub Pages
 
 on:
@@ -32,8 +36,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: node --test "tests/*.test.js"
@@ -45,10 +49,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: src
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
