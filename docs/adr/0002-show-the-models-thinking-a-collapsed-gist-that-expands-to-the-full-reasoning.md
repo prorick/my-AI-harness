@@ -9,9 +9,8 @@ adr teaching map: the example is not the teaching — these are the up-links fro
 # Show the model's thinking: a collapsed gist that expands to the full reasoning
 
 - **Date**: 2026-11-12
-- **Iteration**: 2
-- **Status**: Partially Implemented
-- **Scope Remaining**: one real reply from a reasoning model on the deployed page. The thinking view has only been exercised against a scripted stream shaped after OpenRouter's documentation; no reasoning from a real model has been seen in it yet.
+- **Iteration**: 3
+- **Status**: Implemented
 - **Deciders**: prorick (human), Keel 5.2 (claude-fable-5-2)
 
 **TL;DR**: Each reply gets a "Thought for…" row — duration plus a one-line gist — that opens to the model's own reasoning as OpenRouter returns it; a "Think" switch by the message box (on by default) asks the model to think, and the page says so plainly when a model shares nothing.
@@ -141,14 +140,16 @@ The first real conversation on the page worked, and the next thing wanted was to
 
 ## Open Follow-ups
 
-- [ ] Unverified: a real reasoning stream. Three things rest on documentation or common practice rather than on something seen: that `reasoning: { enabled: true }` is harmless for models without reasoning (the docs say providers "ignore unknown parameters" under default routing, but do not name `reasoning`); the exact chunk shapes; and that each chunk's `model` field names the model that answered (observed practice, not documented). If the first is wrong, non-reasoning models will return an error on every message until the Settings switch is turned off.
+- [x] ~~Unverified: a real reasoning stream.~~ Seen 2026-11-12 in prorick's screenshot of the deployed page: a reply from `openai/gpt-6-luna` (reached through `openrouter/auto`) with the row reading "Thought briefly — Responding to user request". That confirms two of the three things that rested on documentation: the chunk shapes are read correctly, and each chunk's `model` field does name the model that answered.
+- [ ] Still unverified: that `reasoning: { enabled: true }` is harmless for a model that cannot reason (the docs say providers "ignore unknown parameters" under default routing, but do not name `reasoning`). If it is not, such a model will return an error on every message until the Think switch is turned off.
 - [ ] Concern: a reply stopped while the model is still thinking is discarded along with its thinking, as any reply stopped before its first word is.
 
 ---
 
 ## Action Items
 
-- [ ] Try the deployed page with a reasoning model and with a non-reasoning one; report what the row shows - Owner: prorick
+- [x] Try the deployed page with a reasoning model; report what the row shows - Owner: prorick (2026-11-12, screenshot: "Thought briefly — Responding to user request")
+- [ ] Try it once with a model that cannot reason, Think switched on - Owner: prorick, whenever one comes up
 - [x] Answer QST-THINKING-DEFAULT and QST-NO-THINKING - Owner: prorick (2026-11-12: C with the default on; A)
 
 ---
@@ -166,6 +167,12 @@ The first real conversation on the page worked, and the next thing wanted was to
 - Contributors: prorick, Keel 5.2
 - Changes: the thinking switch moved from Settings to a "Think" button by the message box, on by default (C); "no thinking shared" kept as built (A); the answer bylines, stamped again with the unfilled template placeholder, now read `prorick`
 - Outcome: stays `Partially Implemented` — still waiting on a real reply from a reasoning model
+
+### Iteration 3 (2026-11-12)
+- Trigger: prorick's screenshot of the deployed page, sent with a rate-limit error report (see ADR-0004)
+- Contributors: prorick, Keel 5.2
+- Changes: the thinking row seen working with a real reasoning model; the one remaining unverified point (a model that cannot reason) kept as a follow-up
+- Outcome: `Partially Implemented → Implemented`
 
 ---
 
