@@ -50,7 +50,7 @@ adr teaching map: the example is not the teaching — these are the up-links fro
 ## Questions
 
 ### QST-THINKING-DEFAULT: Should the page ask every model to think before answering, by default?
-- Status: unanswered
+- Status: answered
 - Why asking: Most models only produce reasoning when asked (the request carries `reasoning: { enabled: true }`), and thinking costs extra tokens and seconds on every message — including "what is 5 + 5". Of the 475 models OpenRouter lists today, 152 think by default and 147 cannot have it switched off; the rest think only on request or not at all. The page as built asks by default and has a switch in Settings.
 - Need: pick a letter (or override — any shape answers)
 
@@ -63,13 +63,13 @@ Options:
 
 **A — on by default, switch in Settings.** *Rationale*: the request was to see what the model thought, and with the default off most replies would have nothing to show (the `/api/v1/models` counts above, read 2026-11-12); the Settings switch covers the cost without adding a control to the main page. *Confidence*: 0.7 — because the cost side is unmeasured: I have not seen a real bill or a real latency for a thinking reply on this page. *If wrong*: if thinking on small questions feels slow or shows up in the OpenRouter bill, this flips to C.
 
-**ANS:** (by [name])
-[Fill this in]   <!-- literal placeholder — parser-significant, do not paraphrase -->
+**ANS:** (by ⟦HUMAN-NAME⟧)
+Do C, keep it on by default,
 
 ---
 
 ### QST-NO-THINKING: When a model shares no thinking, what should the reply show?
-- Status: unanswered
+- Status: answered
 - Why asking: Some models do not reason at all, and some keep their reasoning encrypted. With `openrouter/auto` this varies from one reply to the next. Today such a reply shows a quiet "no thinking shared" beside the model name and no row. The alternatives produce something to read every time, but what they produce is an explanation written after the answer, not a record of how the answer was reached.
 - Need: pick a letter (or override — any shape answers)
 
@@ -82,8 +82,8 @@ Options:
 
 **A — say so, quietly.** *Rationale*: the request names "what the agent thought when coming to the answer"; B and C would fill the row with a plausible account produced after the fact, under the same label as real thinking, and a reader could not tell the two apart. With QST-THINKING-DEFAULT = A, the 353 of 475 listed models that carry reasoning metadata will usually have something real to show. *Confidence*: 0.75 — because I do not know which models prorick will actually use; the first real conversation was answered by one that shared nothing. *If wrong*: if the row turns out to be missing on most replies in everyday use, this flips to B, with the label kept honest.
 
-**ANS:** (by [name])
-[Fill this in]   <!-- literal placeholder — parser-significant, do not paraphrase -->
+**ANS:** (by ⟦HUMAN-NAME⟧)
+A
 
 ---
 

@@ -33,5 +33,34 @@
     "source": "panel",
     "archivedAt": "2026-11-12T23:29:33.049Z",
     "reason": "promoted"
+  },
+  {
+    "key": "prorick-my-ai-harness:2::7b4709af2a1d::0",
+    "adrPath": "docs/adr/0002-show-the-models-thinking-a-collapsed-gist-that-expands-to-the-full-reasoning.md",
+    "adrNumber": 2,
+    "questionText": "Should the page ask every model to think before answering, by default?",
+    "draftText": "Do C, keep it on by default, ",
+    "updatedAt": "2026-11-13T00:17:50.131Z",
+    "history": [
+      "Do C, ",
+      "Do C, keep it on "
+    ],
+    "totalOccurrences": 1,
+    "source": "panel",
+    "archivedAt": "2026-11-13T00:17:51.574Z",
+    "reason": "promoted"
+  },
+  {
+    "key": "prorick-my-ai-harness:2::2b529180ec5c::0",
+    "adrPath": "docs/adr/0002-show-the-models-thinking-a-collapsed-gist-that-expands-to-the-full-reasoning.md",
+    "adrNumber": 2,
+    "questionText": "When a model shares no thinking, what should the reply show?",
+    "draftText": "A",
+    "updatedAt": "2026-11-13T00:18:26.991Z",
+    "history": [],
+    "totalOccurrences": 1,
+    "source": "panel",
+    "archivedAt": "2026-11-13T00:18:28.705Z",
+    "reason": "promoted"
   }
 ]
