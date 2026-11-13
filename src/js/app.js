@@ -23,7 +23,8 @@ const els = {
   apiKey: $('api-key'),
   toggleKey: $('toggle-key'),
   systemPrompt: $('system-prompt'),
-  thinking: $('thinking'),
+  think: $('think'),
+  install: $('install'),
 };
 
 const make = (tag, className, text) => {
@@ -198,6 +199,7 @@ function render() {
   renderSidebar();
   renderMessages();
   updateSend();
+  els.think.setAttribute('aria-pressed', String(state.settings.thinking));
 }
 
 // While a reply streams, only its own node is repainted, at most once a frame.
@@ -338,6 +340,15 @@ els.input.addEventListener('keydown', (event) => {
   if (!active) els.composer.requestSubmit();
 });
 
+// The thinking switch sits by the message box (ADR-0002, QST-THINKING-DEFAULT
+// = C): it applies to the next message, starts on, and stays how it was left.
+els.think.addEventListener('click', () => {
+  state.settings.thinking = !state.settings.thinking;
+  els.think.setAttribute('aria-pressed', String(state.settings.thinking));
+  persist();
+  els.input.focus();
+});
+
 $('new-chat').addEventListener('click', () => {
   state.activeId = null;
   persist();
@@ -421,7 +432,6 @@ function openSettings() {
   els.apiKey.type = 'password';
   els.toggleKey.textContent = 'Show';
   els.systemPrompt.value = state.settings.systemPrompt;
-  els.thinking.checked = state.settings.thinking;
   els.settings.showModal();
   if (!state.settings.apiKey) els.apiKey.focus();
 }
@@ -440,7 +450,6 @@ $('settings-form').addEventListener('submit', (event) => {
   event.preventDefault();
   state.settings.apiKey = els.apiKey.value.trim();
   state.settings.systemPrompt = els.systemPrompt.value;
-  state.settings.thinking = els.thinking.checked;
   persist();
   els.settings.close();
   render();
@@ -469,6 +478,36 @@ $('toggle-sidebar').addEventListener('click', () => els.app.classList.toggle('si
 $('scrim').addEventListener('click', closeSidebar);
 $('notice-close').addEventListener('click', () => {
   els.notice.hidden = true;
+});
+
+/* ---------- installable app (ADR-0003) ---------- */
+
+// The service worker lets the page open without a network. It never handles
+// requests to OpenRouter (see src/sw.js). Registration failing — an old
+// browser, a private window — costs nothing but offline opening.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// Chromium browsers announce that the page can be installed; the button in
+// the sidebar appears only then. Safari and Firefox install from their own
+// menus ("Add to Dock", "Add to Home Screen") and never fire this.
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  installPrompt = event;
+  els.install.hidden = false;
+});
+els.install.addEventListener('click', async () => {
+  if (!installPrompt) return;
+  const prompt = installPrompt;
+  installPrompt = null;
+  els.install.hidden = true;
+  await prompt.prompt();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  els.install.hidden = true;
 });
 
 /* ---------- other tabs ---------- */
