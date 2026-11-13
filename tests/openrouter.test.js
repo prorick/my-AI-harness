@@ -73,6 +73,82 @@ test('a provider failure in the middle of a reply keeps the text so far and repo
   assert.equal(text, 'Half an ans');
 });
 
+async function events(iterable) {
+  const all = [];
+  for await (const event of iterable) all.push(event);
+  return all;
+}
+// Consecutive events of one kind joined, so a test reads as "thinking, then answer".
+function joined(all) {
+  const out = [];
+  for (const e of all) {
+    const last = out[out.length - 1];
+    if (last && last.type === e.type && 'text' in e) last.text += e.text;
+    else out.push({ ...e });
+  }
+  return out;
+}
+
+test('thinking arrives before the answer, once, whichever way the provider sends it', async () => {
+  // OpenRouter sends reasoning as `reasoning_details` items, and commonly
+  // repeats the same text as a plain `reasoning` string in the same chunk.
+  // Reading both would show every thought twice.
+  const wire =
+    sse({ choices: [{ delta: { reasoning: 'Five plus ', reasoning_details: [{ type: 'reasoning.text', text: 'Five plus ', format: 'anthropic-claude-v1', index: 0 }] } }] }) +
+    sse({ choices: [{ delta: { reasoning: 'five is ten.', reasoning_details: [{ type: 'reasoning.text', text: 'five is ten.', index: 0 }] } }] }) +
+    delta('5 + 5 = 10.') +
+    'data: [DONE]\n\n';
+  const all = await events(streamChat({ apiKey: 'k', model: 'm', messages: [], fetchImpl: async () => streamingResponse(wire, 9) }));
+  assert.deepEqual(joined(all), [
+    { type: 'reasoning', text: 'Five plus five is ten.' },
+    { type: 'text', text: '5 + 5 = 10.' },
+  ]);
+});
+
+test('provider-written summaries and plain reasoning strings are both readable; encrypted reasoning is not shown', async () => {
+  const wire =
+    // OpenAI-style: a summary, under `summary` rather than `text`.
+    sse({ choices: [{ delta: { reasoning_details: [{ type: 'reasoning.summary', summary: '**Adding numbers**\n\n' }] } }] }) +
+    // Providers that send only the plain string.
+    sse({ choices: [{ delta: { reasoning: 'Simple arithmetic.' } }] }) +
+    // Encrypted reasoning carries nothing a person can read.
+    sse({ choices: [{ delta: { reasoning: '[REDACTED]', reasoning_details: [{ type: 'reasoning.encrypted', data: 'gAAAAABo…' }] } }] }) +
+    delta('10') +
+    'data: [DONE]\n\n';
+  const all = await events(streamChat({ apiKey: 'k', model: 'm', messages: [], fetchImpl: async () => streamingResponse(wire, 4096) }));
+  assert.deepEqual(joined(all), [
+    { type: 'reasoning', text: '**Adding numbers**\n\nSimple arithmetic.' },
+    { type: 'text', text: '10' },
+  ]);
+});
+
+test('thinking is requested only when asked for', async () => {
+  const bodies = [];
+  const fetchImpl = async (url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return streamingResponse('data: [DONE]\n\n', 64);
+  };
+  await events(streamChat({ apiKey: 'k', model: 'm', messages: [], reasoning: true, fetchImpl }));
+  await events(streamChat({ apiKey: 'k', model: 'm', messages: [], reasoning: false, fetchImpl }));
+  assert.deepEqual(bodies[0].reasoning, { enabled: true });
+  assert.ok(!('reasoning' in bodies[1]), 'switched off, the model is left to its own default');
+});
+
+test('with a router model, the reply says which model actually answered', async () => {
+  // Asking for `openrouter/auto` gets a different model per request; chunks name it.
+  const chunk = (content) => sse({ model: 'openai/gpt-x-mini', choices: [{ delta: { content } }] });
+  const wire = chunk('Hi') + chunk(' there') + 'data: [DONE]\n\n';
+  const all = await events(streamChat({ apiKey: 'k', model: 'openrouter/auto', messages: [], fetchImpl: async () => streamingResponse(wire, 4096) }));
+  assert.deepEqual(joined(all), [
+    { type: 'model', id: 'openai/gpt-x-mini' },
+    { type: 'text', text: 'Hi there' },
+  ]);
+
+  // Asked for by name, there is nothing to report.
+  const same = await events(streamChat({ apiKey: 'k', model: 'openai/gpt-x-mini', messages: [], fetchImpl: async () => streamingResponse(wire, 4096) }));
+  assert.ok(!same.some((e) => e.type === 'model'));
+});
+
 test('a rejected key is reported in words that say what to fix', async () => {
   const fetchImpl = async () =>
     new Response(JSON.stringify({ error: { code: 401, message: 'No auth credentials found' } }), { status: 401 });
@@ -93,12 +169,12 @@ test('being offline is reported as a connection problem, not as a code error', (
   assert.match(describeError(new TypeError('Failed to fetch')), /connection/);
 });
 
-test('the conversation is sent without local-only fields and without empty failed replies', () => {
+test('the conversation is sent without local-only fields (model, error, thinking) and without empty failed replies', () => {
   const stored = [
     { role: 'user', content: 'First question' },
     { role: 'assistant', content: '', model: 'a/b', error: 'Rate limited.' }, // failed before its first token
     { role: 'user', content: 'First question again' },
-    { role: 'assistant', content: 'An answer', model: 'a/b' },
+    { role: 'assistant', content: 'An answer', model: 'a/b', reasoning: 'Thought about it.', thinkingMs: 1200 },
   ];
   assert.deepEqual(buildMessages(stored, '  Be brief.  '), [
     { role: 'system', content: 'Be brief.' },

@@ -79,6 +79,14 @@
         <textarea id="system-prompt" rows="4" placeholder="How the model should behave in every conversation."></textarea>
       </label>
 
+      <label class="check">
+        <input id="thinking" type="checkbox">
+        <span>
+          <span class="field-label">Ask the model to think before it answers</span>
+          <span class="field-help">Each reply then gets a “Thought for…” row you can open to read the model’s reasoning. Thinking uses more tokens and takes longer. Some models think either way, and some never share it.</span>
+        </span>
+      </label>
+
       <div class="dialog-actions">
         <button type="button" class="btn danger" id="clear-all">Delete all conversations</button>
         <span class="spacer"></span>

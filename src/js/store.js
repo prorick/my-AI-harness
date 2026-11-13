@@ -13,7 +13,7 @@ const UNTITLED = 'New chat';
 export function emptyState() {
   return {
     version: 1,
-    settings: { apiKey: '', model: DEFAULT_MODEL, systemPrompt: '' },
+    settings: { apiKey: '', model: DEFAULT_MODEL, systemPrompt: '', thinking: true },
     conversations: [],
     activeId: null,
   };
@@ -31,6 +31,7 @@ function normalize(raw) {
   state.settings.apiKey = str(s.apiKey);
   state.settings.model = str(s.model).trim() || DEFAULT_MODEL;
   state.settings.systemPrompt = str(s.systemPrompt);
+  state.settings.thinking = s.thinking !== false; // on unless switched off; entries saved before ADR-0002 have no value
 
   const now = Date.now();
   for (const c of Array.isArray(raw.conversations) ? raw.conversations : []) {
@@ -41,6 +42,11 @@ function normalize(raw) {
       const msg = { role: m.role, content: m.content };
       if (typeof m.model === 'string') msg.model = m.model;
       if (typeof m.error === 'string') msg.error = m.error;
+      // The model's thinking for this reply, how long it took, and whether
+      // thinking was asked for but none was shared (ADR-0002).
+      if (typeof m.reasoning === 'string' && m.reasoning) msg.reasoning = m.reasoning;
+      if (Number.isFinite(m.thinkingMs)) msg.thinkingMs = m.thinkingMs;
+      if (m.noThinking === true) msg.noThinking = true;
       messages.push(msg);
     }
     state.conversations.push({

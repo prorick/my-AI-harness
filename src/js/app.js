@@ -4,6 +4,7 @@
 import { STORAGE_KEY, DEFAULT_MODEL, createStore, createConversation, appendMessage, removeConversation, recentFirst } from './store.js';
 import { streamChat, fetchModels, buildMessages, describeError } from './openrouter.js';
 import { renderMarkdown } from './render.js';
+import { thinkingLabel, gist } from './thinking.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -22,6 +23,7 @@ const els = {
   apiKey: $('api-key'),
   toggleKey: $('toggle-key'),
   systemPrompt: $('system-prompt'),
+  thinking: $('thinking'),
 };
 
 const make = (tag, className, text) => {
@@ -39,7 +41,12 @@ let state = loaded.state;
 let active = null;
 // The DOM node the streaming reply is painted into, when it is on screen.
 let liveBody = null;
+// The "Thought for…" row of the streaming reply, once it has one.
+let liveThinking = null;
 let paintQueued = false;
+// Replies whose thinking the reader has expanded. Kept by message object so a
+// row stays open through re-renders; a reload starts with all rows collapsed.
+const openThinking = new WeakSet();
 
 /* ---------- state helpers ---------- */
 
@@ -102,6 +109,37 @@ function typingDots() {
   return dots;
 }
 
+// The "Thought for…" row (ADR-0002): a native <details>, so the expand button,
+// keyboard handling and screen-reader state come from the browser. Collapsed,
+// it shows how long the model thought and a one-line gist; expanded, the
+// model's reasoning in full.
+function paintThinking(node, message, stillThinking) {
+  node.label.textContent = stillThinking ? 'Thinking…' : thinkingLabel(message.thinkingMs);
+  node.gist.textContent = gist(message.reasoning, { from: stillThinking ? 'end' : 'start' });
+  // The full text is only built while the row is open.
+  if (node.details.open) node.body.replaceChildren(renderMarkdown(message.reasoning));
+}
+
+function thinkingEl(message, isLive) {
+  const details = make('details', 'thinking');
+  const summary = make('summary');
+  const node = { details, label: make('span', 'thinking-label'), gist: make('span', 'thinking-gist'), body: make('div', 'thinking-body prose') };
+  summary.append(node.label, node.gist);
+  details.append(summary, node.body);
+  details.open = openThinking.has(message);
+  details.addEventListener('toggle', () => {
+    if (details.open) {
+      openThinking.add(message);
+      node.body.replaceChildren(renderMarkdown(message.reasoning));
+    } else {
+      openThinking.delete(message);
+    }
+  });
+  paintThinking(node, message, isLive && !message.content);
+  if (isLive) liveThinking = node;
+  return details;
+}
+
 function messageEl(message, index, conv) {
   const article = make('article', `msg ${message.role}`);
   if (message.role === 'user') {
@@ -110,6 +148,7 @@ function messageEl(message, index, conv) {
   }
 
   const isLive = active?.msg === message;
+  if (message.reasoning) article.append(thinkingEl(message, isLive));
   const body = make('div', 'prose');
   if (message.content) body.append(renderMarkdown(message.content));
   else if (isLive) body.append(typingDots());
@@ -131,6 +170,7 @@ function messageEl(message, index, conv) {
   if (!isLive && message.content) {
     const meta = make('div', 'msg-meta');
     if (message.model) meta.append(make('span', null, message.model));
+    if (message.noThinking) meta.append(make('span', null, 'no thinking shared'));
     const copy = make('button', 'link-btn', 'Copy');
     copy.type = 'button';
     copy.dataset.action = 'copy';
@@ -146,6 +186,7 @@ function renderMessages() {
   els.title.textContent = conv ? conv.title : 'New chat';
   document.title = conv ? `${conv.title} · Harness` : 'Harness';
   liveBody = null;
+  liveThinking = null;
   const thread = make('div', 'thread');
   if (!conv || !conv.messages.length) thread.append(emptyState());
   else conv.messages.forEach((message, index) => thread.append(messageEl(message, index, conv)));
@@ -169,7 +210,14 @@ function queuePaint() {
     if (!active || !liveBody || state.activeId !== active.convId) return;
     const box = els.messages;
     const following = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-    liveBody.replaceChildren(renderMarkdown(active.msg.content));
+    const msg = active.msg;
+    if (msg.reasoning) {
+      // The row appears with the first thought; until the answer starts, the
+      // waiting dots stay below it.
+      if (!liveThinking) liveBody.before(thinkingEl(msg, true));
+      else paintThinking(liveThinking, msg, !msg.content);
+    }
+    if (msg.content) liveBody.replaceChildren(renderMarkdown(msg.content));
     if (following) box.scrollTop = box.scrollHeight;
   });
 }
@@ -197,16 +245,30 @@ async function reply(conv) {
   persist();
   render();
 
+  const askedToThink = state.settings.thinking;
+  let thinkingSince = null;
+  const endThinking = () => {
+    if (thinkingSince !== null && msg.thinkingMs === undefined) msg.thinkingMs = Math.round(performance.now() - thinkingSince);
+  };
   let stopped = false;
   try {
-    const stream = streamChat({ apiKey: state.settings.apiKey, model, messages: outgoing, signal: controller.signal });
+    const stream = streamChat({ apiKey: state.settings.apiKey, model, messages: outgoing, reasoning: askedToThink, signal: controller.signal });
     // One model turn. When tools arrive (ADR-0001, QST-HARNESS-SCOPE = C) this
     // is where the loop goes: handle the new event kinds here, run the tool,
     // append its result to `outgoing`, and stream again until the model stops
     // asking.
     for await (const event of stream) {
-      if (event.type !== 'text') continue;
-      msg.content += event.text;
+      if (event.type === 'reasoning') {
+        thinkingSince ??= performance.now();
+        msg.reasoning = (msg.reasoning ?? '') + event.text;
+      } else if (event.type === 'text') {
+        endThinking(); // the thinking time ends when the answer starts
+        msg.content += event.text;
+      } else if (event.type === 'model') {
+        msg.model = event.id;
+      } else {
+        continue;
+      }
       queuePaint();
     }
   } catch (err) {
@@ -214,6 +276,11 @@ async function reply(conv) {
     else msg.error = describeError(err);
   } finally {
     active = null;
+    endThinking();
+    // Say so when thinking was asked for and the model shared none (it does
+    // not reason, or keeps its reasoning encrypted) — otherwise a missing row
+    // looks like a bug.
+    if (askedToThink && !msg.reasoning && msg.content && !msg.error) msg.noThinking = true;
     // A reply stopped before its first word leaves nothing worth keeping.
     if (stopped && !msg.content) conv.messages = conv.messages.filter((m) => m !== msg);
     conv.updatedAt = Date.now();
@@ -354,6 +421,7 @@ function openSettings() {
   els.apiKey.type = 'password';
   els.toggleKey.textContent = 'Show';
   els.systemPrompt.value = state.settings.systemPrompt;
+  els.thinking.checked = state.settings.thinking;
   els.settings.showModal();
   if (!state.settings.apiKey) els.apiKey.focus();
 }
@@ -372,6 +440,7 @@ $('settings-form').addEventListener('submit', (event) => {
   event.preventDefault();
   state.settings.apiKey = els.apiKey.value.trim();
   state.settings.systemPrompt = els.systemPrompt.value;
+  state.settings.thinking = els.thinking.checked;
   persist();
   els.settings.close();
   render();

@@ -30,14 +30,17 @@ class MemoryStorage {
   }
 }
 
-test('conversations, settings and the key are still there after a reload', () => {
+test('conversations, settings, the key and each reply’s thinking are still there after a reload', () => {
   const storage = new MemoryStorage();
   const { state } = createStore(storage).load();
   state.settings.apiKey = 'sk-or-test';
   state.settings.model = 'some/model';
   const conv = createConversation({ id: 'c1', now: 1000 });
   appendMessage(conv, { role: 'user', content: 'Why is the sky blue?' }, 2000);
-  appendMessage(conv, { role: 'assistant', content: 'Rayleigh scattering.', model: 'some/model' }, 3000);
+  appendMessage(conv, { role: 'assistant', content: 'Rayleigh scattering.', model: 'some/model', reasoning: 'Short wavelengths scatter more.', thinkingMs: 2300 }, 3000);
+  appendMessage(conv, { role: 'user', content: 'And at sunset?' }, 4000);
+  appendMessage(conv, { role: 'assistant', content: 'A longer path through the air.', model: 'some/model', noThinking: true }, 5000);
+  state.settings.thinking = false;
   state.conversations.push(conv);
   state.activeId = 'c1';
   assert.deepEqual(createStore(storage).save(state), { ok: true });
@@ -115,6 +118,7 @@ test('an entry with missing or damaged parts loads what is sound and drops the r
   assert.equal(problem, null);
   assert.equal(state.settings.apiKey, 'sk-or-test');
   assert.equal(state.settings.model, DEFAULT_MODEL);
+  assert.equal(state.settings.thinking, true, 'an entry saved before the thinking switch existed gets it switched on');
   assert.equal(state.activeId, null, 'an active id that points nowhere is cleared');
   assert.deepEqual(state.conversations, [{ id: 'ok', title: 'Kept', createdAt: 1, updatedAt: 2, messages: [{ role: 'user', content: 'hi' }] }]);
 });

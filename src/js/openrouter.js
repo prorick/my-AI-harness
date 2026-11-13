@@ -15,7 +15,8 @@ export class OpenRouterError extends Error {
 
 // What goes on the wire: an optional system prompt, then the turns. Only
 // `role` and `content` are sent — stored messages also carry local fields
-// (`model`, `error`). Empty turns are skipped: a reply that failed before its
+// (`model`, `error`, `reasoning`, …). A reply's reasoning is not sent back:
+// OpenRouter only needs that for tool calling. Empty turns are skipped: a reply that failed before its
 // first token is stored empty, and providers reject empty assistant messages.
 export function buildMessages(messages, systemPrompt = '') {
   const out = [];
@@ -70,15 +71,40 @@ async function errorFromResponse(res) {
   return new OpenRouterError(detail || `OpenRouter answered ${res.status}.`, { status: res.status, code });
 }
 
-// Streams one reply as a sequence of events. Today there is one kind,
-// `{ type: 'text', text }`; the events are typed so that tool calls can be
-// added as a second kind without changing how callers read the stream
-// (ADR-0001, QST-HARNESS-SCOPE = C: chat now, tools next).
+// The readable reasoning in one stream delta (ADR-0002). OpenRouter documents
+// `delta.reasoning_details`: a list of items that are raw text
+// (`reasoning.text` → `text`), a provider-written summary
+// (`reasoning.summary` → `summary`), or encrypted (`reasoning.encrypted`, not
+// readable). Chunks may also carry the same text as a plain `delta.reasoning`
+// string, so that is only a fallback — reading both would show it twice.
+export function readReasoning(delta) {
+  let text = '';
+  if (Array.isArray(delta?.reasoning_details)) {
+    for (const item of delta.reasoning_details) {
+      if (item?.type === 'reasoning.text' && typeof item.text === 'string') text += item.text;
+      else if (item?.type === 'reasoning.summary' && typeof item.summary === 'string') text += item.summary;
+    }
+  }
+  if (!text && typeof delta?.reasoning === 'string') text = delta.reasoning;
+  return text === '[REDACTED]' ? '' : text;
+}
+
+// Streams one reply as a sequence of typed events:
+//   { type: 'reasoning', text }  the model's thinking, when it shares any
+//   { type: 'text', text }       the answer
+//   { type: 'model', id }        the model that actually answered, when it is
+//                                not the one asked for (e.g. `openrouter/auto`)
+// The events are typed so that tool calls can be added as another kind
+// without changing how callers read the stream (ADR-0001, QST-HARNESS-SCOPE = C).
+//
+// `reasoning: true` asks the model to think before answering (ADR-0002).
+// Without it the model does whatever it does by default, and any thinking it
+// shares still arrives as events.
 //
 // Throws OpenRouterError for anything OpenRouter or the provider reports,
 // including errors that arrive after the stream has started (those come as a
 // chunk with an `error` field, on a 200 response).
-export async function* streamChat({ apiKey, model, messages, signal, fetchImpl = globalThis.fetch }) {
+export async function* streamChat({ apiKey, model, messages, reasoning = false, signal, fetchImpl = globalThis.fetch }) {
   const res = await fetchImpl(`${API_BASE}/chat/completions`, {
     method: 'POST',
     signal,
@@ -87,10 +113,11 @@ export async function* streamChat({ apiKey, model, messages, signal, fetchImpl =
       'Content-Type': 'application/json',
       'X-Title': 'Harness',
     },
-    body: JSON.stringify({ model, messages, stream: true }),
+    body: JSON.stringify({ model, messages, stream: true, ...(reasoning ? { reasoning: { enabled: true } } : {}) }),
   });
   if (!res.ok) throw await errorFromResponse(res);
 
+  let servedModel = model;
   for await (const payload of sseData(res.body)) {
     if (payload === '[DONE]') return;
     let chunk;
@@ -102,8 +129,15 @@ export async function* streamChat({ apiKey, model, messages, signal, fetchImpl =
     if (chunk.error) {
       throw new OpenRouterError(chunk.error.message || 'The model reported an error.', { code: chunk.error.code ?? null });
     }
-    const delta = chunk.choices?.[0]?.delta?.content;
-    if (typeof delta === 'string' && delta) yield { type: 'text', text: delta };
+    if (typeof chunk.model === 'string' && chunk.model && chunk.model !== servedModel) {
+      servedModel = chunk.model;
+      yield { type: 'model', id: servedModel };
+    }
+    const delta = chunk.choices?.[0]?.delta;
+    if (!delta) continue;
+    const thought = readReasoning(delta);
+    if (thought) yield { type: 'reasoning', text: thought };
+    if (typeof delta.content === 'string' && delta.content) yield { type: 'text', text: delta.content };
   }
 }
 
