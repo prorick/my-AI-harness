@@ -85,6 +85,7 @@ NOT: no open questions — the request was a single instruction, the one real ch
 
 * `tests/pwa.test.js` (7 tests) runs the real `src/sw.js` against a stand-in for the browser's cache: the offline list matches the files on disk, OpenRouter requests are never handled, offline requests are served from the saved copy, online requests are served fresh, and only this project's old caches are deleted. It also checks the manifest's icons exist at the sizes claimed and that the security policy lets the manifest and worker load.
 * In headless Chrome (`scripts/ephemeral/2026-11-12-drive-chat-flow.mjs`, 38/38): the worker took control of the page, Chrome reported no manifest errors and no installability errors, and with the web server shut down a reload still opened the page with its saved conversation.
+* On the deployed page (`scripts/ephemeral/2026-11-12-check-live-install.mjs`, after the deploy of `fbaa806`): the worker controls the page with its scope at `/my-AI-harness/`, Chrome reports no manifest errors and no installability errors, `start_url` resolves to the project folder, and 14 files are saved for offline use. `https://prorick.github.io/` still answers 200.
 * Not verified: installing on a real phone or desktop, and how the installed app looks on iOS.
 
 ## Links
