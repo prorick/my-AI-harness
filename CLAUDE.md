@@ -249,11 +249,12 @@ If the script was successfully used, append as comments how, and what the outcom
 A simple chat harness: one clean, static chat page, served by GitHub Pages, that calls OpenRouter straight from the browser with the visitor's own API key and keeps conversations in localStorage. This is the product repo — the page lives in `src/`, its tests in `tests/`; there is no server and no build step.
 
 ### Current focus:
-The chat page is live at https://prorick.github.io/my-AI-harness/ and works with a real key (ADR-0001, Implemented). In progress: showing the model's thinking (ADR-0002) — built and deployed, waiting on a real reply from a reasoning model and on two open questions. Next milestone, in its own ADR: tools, so the harness can do more than chat.
+The chat page is live at https://prorick.github.io/my-AI-harness/ and works with a real key (ADR-0001, Implemented). Built and deployed, each waiting on one real-world check: showing the model's thinking (ADR-0002 — needs a real reply from a reasoning model) and the installable, offline-opening app (ADR-0003 — needs one real install). Next milestone, in its own ADR: tools, so the harness can do more than chat.
 
 ### Key decisions made:
 - Mission and architecture (static page, OpenRouter from the browser, localStorage, Pages via Actions publishing `src/`) — see `docs/adr/0001-*.md`
 - Showing the model's thinking (the model's own reasoning, collapsed to a gist; never an explanation written on its behalf) — see `docs/adr/0002-*.md`
+- Installable PWA that opens offline (service worker fetches network-first; never handles OpenRouter requests; the offline file list in `src/sw.js` is kept by hand and checked by `tests/pwa.test.js`) — see `docs/adr/0003-*.md`
 
 ### Open questions:
 ```bash

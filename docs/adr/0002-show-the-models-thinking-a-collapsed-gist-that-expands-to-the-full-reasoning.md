@@ -9,12 +9,12 @@ adr teaching map: the example is not the teaching — these are the up-links fro
 # Show the model's thinking: a collapsed gist that expands to the full reasoning
 
 - **Date**: 2026-11-12
-- **Iteration**: 1
+- **Iteration**: 2
 - **Status**: Partially Implemented
 - **Scope Remaining**: one real reply from a reasoning model on the deployed page. The thinking view has only been exercised against a scripted stream shaped after OpenRouter's documentation; no reasoning from a real model has been seen in it yet.
 - **Deciders**: prorick (human), Keel 5.2 (claude-fable-5-2)
 
-**TL;DR**: Each reply gets a "Thought for…" row — duration plus a one-line gist — that opens to the model's own reasoning as OpenRouter returns it; the page asks models to think by default, and says so plainly when a model shares nothing.
+**TL;DR**: Each reply gets a "Thought for…" row — duration plus a one-line gist — that opens to the model's own reasoning as OpenRouter returns it; a "Think" switch by the message box (on by default) asks the model to think, and the page says so plainly when a model shares nothing.
 
 ---
 
@@ -63,7 +63,7 @@ Options:
 
 **A — on by default, switch in Settings.** *Rationale*: the request was to see what the model thought, and with the default off most replies would have nothing to show (the `/api/v1/models` counts above, read 2026-11-12); the Settings switch covers the cost without adding a control to the main page. *Confidence*: 0.7 — because the cost side is unmeasured: I have not seen a real bill or a real latency for a thinking reply on this page. *If wrong*: if thinking on small questions feels slow or shows up in the OpenRouter bill, this flips to C.
 
-**ANS:** (by ⟦HUMAN-NAME⟧)
+**ANS:** (by prorick)
 Do C, keep it on by default,
 
 ---
@@ -82,7 +82,7 @@ Options:
 
 **A — say so, quietly.** *Rationale*: the request names "what the agent thought when coming to the answer"; B and C would fill the row with a plausible account produced after the fact, under the same label as real thinking, and a reader could not tell the two apart. With QST-THINKING-DEFAULT = A, the 353 of 475 listed models that carry reasoning metadata will usually have something real to show. *Confidence*: 0.75 — because I do not know which models prorick will actually use; the first real conversation was answered by one that shared nothing. *If wrong*: if the row turns out to be missing on most replies in everyday use, this flips to B, with the label kept honest.
 
-**ANS:** (by ⟦HUMAN-NAME⟧)
+**ANS:** (by prorick)
 A
 
 ---
@@ -124,7 +124,12 @@ The first real conversation on the page worked, and the next thing wanted was to
 
 **Trade-offs accepted**:
 - **Not every reply has a row.** Models that share nothing get "no thinking shared" (QST-NO-THINKING).
-- **Thinking costs tokens and time** while the default is on (QST-THINKING-DEFAULT).
+- **Thinking costs tokens and time** whenever the switch is on, and it starts on (QST-THINKING-DEFAULT).
+
+### Refinements from the answers (Iteration 2)
+
+- **QST-THINKING-DEFAULT = C, on by default.** The switch moved from Settings to the message box: a "Think" button beside Send. It applies to the next message, starts on, and stays how it was left (it is saved with the other settings). The Settings checkbox is gone — one control, not two. This differs from the recommendation (A); the recommendation's own falsifier named C as the alternative, and nothing else changes.
+- **QST-NO-THINKING = A.** As built: a quiet "no thinking shared" beside the model name, and nothing invented.
 - **The gist is only as good as the reasoning's first line.** For summarising providers that is a title; for raw thinking it is the opening sentence, which may be scene-setting rather than a conclusion.
 - **Saved thinking takes space.** It is stored with each reply, and localStorage holds about 5 MB in all. The page already reports a full store.
 
@@ -144,7 +149,7 @@ The first real conversation on the page worked, and the next thing wanted was to
 ## Action Items
 
 - [ ] Try the deployed page with a reasoning model and with a non-reasoning one; report what the row shows - Owner: prorick
-- [ ] Answer QST-THINKING-DEFAULT and QST-NO-THINKING - Owner: prorick
+- [x] Answer QST-THINKING-DEFAULT and QST-NO-THINKING - Owner: prorick (2026-11-12: C with the default on; A)
 
 ---
 
@@ -155,6 +160,12 @@ The first real conversation on the page worked, and the next thing wanted was to
 - Contributors: prorick, Keel 5.2
 - Changes: feature built per the two recommendations; 9 tests added (33 in all); the browser driver extended to 30 checks, all passing against a scripted stream
 - Outcome: `Partially Implemented` (built and deployed; not yet seen with real reasoning)
+
+### Iteration 2 (2026-11-12)
+- Trigger: prorick answered both questions in the ADR (commit `edbd349`)
+- Contributors: prorick, Keel 5.2
+- Changes: the thinking switch moved from Settings to a "Think" button by the message box, on by default (C); "no thinking shared" kept as built (A); the answer bylines, stamped again with the unfilled template placeholder, now read `prorick`
+- Outcome: stays `Partially Implemented` — still waiting on a real reply from a reasoning model
 
 ---
 
