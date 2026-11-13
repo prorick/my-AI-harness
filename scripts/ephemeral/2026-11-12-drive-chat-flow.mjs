@@ -48,6 +48,18 @@ const FAKE_FETCH = `(() => {
     if (last.includes('fail')) {
       return new Response(JSON.stringify({ error: { code: 401, message: 'No auth credentials found' } }), { status: 401 });
     }
+    // "flaky": the first try is accepted (200) and then rate-limited by the
+    // provider inside the stream, after a little thinking — the shape of the
+    // failure prorick hit on the live page. The second try answers normally.
+    if (last.includes('flaky')) {
+      window.__flaky = (window.__flaky || 0) + 1;
+      if (window.__flaky === 1) {
+        const line = (obj) => 'data: ' + JSON.stringify(obj) + '\\n\\n';
+        const body = line({ model: 'fake/limited-1', choices: [{ delta: { reasoning: 'Starting to think' } }] })
+          + line({ model: 'fake/limited-1', error: { code: 429, message: 'fake/limited-1 is temporarily rate-limited upstream. Please retry shortly.' }, choices: [{ index: 0, delta: { content: '' }, finish_reason: 'error' }] });
+        return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(body)); c.close(); } }), { status: 200 });
+      }
+    }
     const slow = last.includes('slow');
     const pieces = slow
       ? Array.from({ length: 200 }, (_, i) => 'word' + i + ' ')
@@ -220,6 +232,26 @@ try {
   // --- thinking (ADR-0002) ----------------------------------------------------
   const lastReply = `[...document.querySelectorAll('.msg.assistant')].at(-1)`;
   const notBusy = `!document.getElementById('send').classList.contains('busy')`;
+
+  // --- automatic retry (ADR-0004) ----------------------------------------------
+  await js(`document.getElementById('new-chat').click()`);
+  const beforeRetry = await js(`window.__requests.length`);
+  await say('a flaky question');
+  check(
+    'a rate-limited reply shows a “trying again” note, not an error, and drops the failed try’s thinking',
+    await until(`(document.querySelector('.retry-note')?.textContent ?? '').includes('attempt 2 of 4') && document.querySelector('.msg-error') === null && document.querySelector('.thinking') === null`, 3000),
+    await js(`document.querySelector('.retry-note')?.textContent`),
+  );
+  await shot('drive-retry-note.png');
+  await until(notBusy, 15000);
+  s = await saved();
+  const retried = s.conversations.find((c) => c.id === s.activeId).messages.at(-1);
+  check(
+    '…then the answer arrives by itself, on the second request, with nothing kept from the failed one',
+    retried.content.endsWith('Done <b>not html</b>.') && !retried.error && !retried.reasoning && retried.model === 'openrouter/auto' && (await js(`window.__requests.length`)) === beforeRetry + 2 && (await js(`document.querySelector('.retry-note') === null && document.querySelector('.msg-error') === null`)),
+    JSON.stringify({ model: retried.model, requests: (await js(`window.__requests.length`)) - beforeRetry }),
+  );
+
   await js(`document.getElementById('new-chat').click()`);
   await say('think about 5 + 5');
   check('while the model thinks, a “Thinking…” row shows above the waiting dots', await until(`document.querySelector('.thinking .thinking-label')?.textContent === 'Thinking…' && document.querySelector('.msg.assistant .typing') !== null`, 3000));
@@ -321,5 +353,10 @@ process.exit(failed ? 1 : 0);
 //   worker controlled the page, Chrome reported nothing blocking install, and
 //   the page reopened offline with its conversation. Give it a fresh output
 //   directory each time — a profile from an earlier run carries an old worker.
+// - And for the automatic retry (ADR-0004): a "flaky" scenario whose first
+//   try is rate-limited inside a 200 stream after a little thinking — the
+//   shape of the failure prorick reported from the live page — and whose
+//   second try answers. 40/40: the page showed the "trying again" note, then
+//   the answer, with two requests and nothing kept from the failed try.
 // - Follow-up recorded in docs/TECHNICAL-DEBT.md ("The gate does not open a
 //   browser"): promote this to a real test.
