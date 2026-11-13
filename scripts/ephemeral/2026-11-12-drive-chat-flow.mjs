@@ -25,8 +25,15 @@ mkdirSync(outDir, { recursive: true });
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 9333;
-const APP = 'http://127.0.0.1:8765/src/index.html';
+const SITE_PORT = 8766;
+const APP = `http://127.0.0.1:${SITE_PORT}/src/index.html`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Since the PWA work (ADR-0003) the driver runs its own web server, so that it
+// can take the server away and check the page still opens offline. Run it from
+// the repo root; no separate `python3 -m http.server` is needed any more.
+const server = spawn('python3', ['-m', 'http.server', String(SITE_PORT), '--bind', '127.0.0.1'], { stdio: 'ignore' });
+const serverGone = new Promise((resolve) => server.on('exit', resolve));
 
 // Runs in the page before any of its scripts. Answers by what the last user
 // message says, so each scenario below picks its own behaviour.
@@ -239,15 +246,27 @@ try {
   check('a row the reader opened stays open when the page re-renders', await js(`document.querySelector('.thinking').open && document.querySelector('.thinking-body').textContent.includes('Five plus five is ten.')`));
   check('the follow-up did not send the earlier thinking back to the model', await js(`window.__requests.at(-1).body.messages.every((m) => Object.keys(m).sort().join() === 'content,role')`));
 
-  await js(`(() => { document.getElementById('open-settings').click(); document.getElementById('thinking').checked = false; document.getElementById('settings-form').requestSubmit(); })()`);
+  // The switch sits by the message box, on by default (QST-THINKING-DEFAULT = C).
+  check('the Think switch starts on', await js(`document.getElementById('think').getAttribute('aria-pressed') === 'true'`));
+  await js(`document.getElementById('think').click()`);
+  check('clicking it turns it off and the choice is saved', (await js(`document.getElementById('think').getAttribute('aria-pressed')`)) === 'false' && (await saved()).settings.thinking === false);
   await say('think once more');
   await until(`${notBusy} && document.querySelectorAll('.msg.assistant').length === 3`);
-  check('switched off in Settings, the request no longer asks for thinking', await js(`!('reasoning' in window.__requests.at(-1).body)`));
+  check('switched off, the request no longer asks for thinking', await js(`!('reasoning' in window.__requests.at(-1).body)`));
   check('…but thinking a model shares anyway is still shown', await js(`${lastReply}.querySelector('.thinking') !== null && !${lastReply}.querySelector('.msg-meta').textContent.includes('no thinking shared')`));
 
   await cdp('Page.reload');
   await until(`document.querySelectorAll('.msg').length > 0`);
   check('after a reload both thinking rows are back, collapsed', await js(`document.querySelectorAll('.thinking').length === 2 && [...document.querySelectorAll('.thinking')].every((d) => !d.open)`));
+  check('…and the Think switch is still off, as it was left', await js(`document.getElementById('think').getAttribute('aria-pressed') === 'false'`));
+
+  // --- installable app (ADR-0003) ---------------------------------------------
+  check('the service worker is active and controls the page', await until(`navigator.serviceWorker.controller !== null`, 10000));
+  const manifest = await cdp('Page.getAppManifest');
+  check('Chrome reads the manifest without errors', manifest.errors.length === 0 && manifest.url.endsWith('manifest.webmanifest'), JSON.stringify(manifest.errors));
+  const installability = await cdp('Page.getInstallabilityErrors');
+  check('Chrome finds nothing that would stop the page being installed', installability.installabilityErrors.length === 0, JSON.stringify(installability.installabilityErrors));
+  await shot('drive-7-think-switch.png');
 
   // --- the model list (real network: OpenRouter's public endpoint) -----------
   // A scripted .focus() fires no `focus` event here: a headless page does not
@@ -257,9 +276,20 @@ try {
   check('the model picker fills from OpenRouter’s live list (real request, through the CSP)', gotModels, `${await js(`document.querySelectorAll('#model-list option').length`)} models`);
 
   check('no script errors, CSP violations or console errors during the run', problems.length === 0, problems.join(' | '));
+
+  // --- offline (ADR-0003): take the web server away, then reload --------------
+  server.kill();
+  await serverGone;
+  const serverDown = await fetch(APP).then(() => false, () => true);
+  await cdp('Page.reload');
+  const opened = await until(`document.querySelectorAll('.msg').length > 0 && document.getElementById('chat-title').textContent === 'think about 5 + 5'`, 8000);
+  check('with the web server gone, a reload still opens the page with its saved conversation', serverDown && opened, `server down: ${serverDown}`);
+  check('…styled, and with its scripts running', await js(`getComputedStyle(document.querySelector('.sidebar')).display === 'flex' && document.getElementById('think').getAttribute('aria-pressed') === 'false'`));
+  await shot('drive-8-offline.png');
   ws.close();
 } finally {
   chrome.kill();
+  server.kill();
 }
 
 const failed = results.filter((r) => !r.ok).length;
@@ -283,5 +313,13 @@ process.exit(failed ? 1 : 0);
 //   reasoning_details and as the plain string), then the answer, naming a
 //   served model. 30/30 on the first run. It supported deploying the thinking
 //   view; it does not show that a real model's reasoning arrives in that shape.
+// - Later again, for the PWA (ADR-0003) and the Think switch (ADR-0002,
+//   QST-THINKING-DEFAULT = C): the driver now starts its own web server on
+//   :8766 (so it can shut it down), checks the switch, asks Chrome for
+//   manifest and installability errors over the DevTools protocol, then kills
+//   the server and reloads. 38/38 on the first run with a fresh profile: the
+//   worker controlled the page, Chrome reported nothing blocking install, and
+//   the page reopened offline with its conversation. Give it a fresh output
+//   directory each time — a profile from an earlier run carries an old worker.
 // - Follow-up recorded in docs/TECHNICAL-DEBT.md ("The gate does not open a
 //   browser"): promote this to a real test.
