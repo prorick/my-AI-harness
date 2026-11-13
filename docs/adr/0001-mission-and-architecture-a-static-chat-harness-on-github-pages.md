@@ -9,9 +9,8 @@ adr teaching map: the example is not the teaching — these are the up-links fro
 # Mission and architecture: a static chat harness on GitHub Pages
 
 - **Date**: 2026-11-12
-- **Iteration**: 2
-- **Status**: Partially Implemented
-- **Scope Remaining**: one real conversation on the deployed page with a real OpenRouter key (so far the reply stream has only been exercised with a scripted stand-in). Tools are a separate, later ADR, not remaining scope of this one.
+- **Iteration**: 3
+- **Status**: Implemented
 - **Deciders**: prorick (human), Keel 5.2 (claude-fable-5-2)
 
 **TL;DR**: The project is a clean, static chat page served by GitHub Pages that calls OpenRouter directly from the browser with the visitor's own API key and keeps everything in localStorage — no server, no build step.
@@ -124,7 +123,7 @@ The project needed a mission; the founder gave one in five sentences. This recor
 
 ## Open Follow-ups
 
-- [ ] Unverified: a real chat completion from the deployed page. The request path is tested against a fake `fetch`, and the whole page was driven in headless Chrome with a scripted reply stream (`scripts/ephemeral/2026-11-12-drive-chat-flow.mjs`, 18/18); no API key was available to test against OpenRouter itself. This is why the status is Partially Implemented and not Implemented.
+- [x] ~~Unverified: a real chat completion from the deployed page.~~ Verified 2026-11-12 by prorick: a three-turn conversation on the deployed page with a real key, through `openrouter/auto` (screenshot shared in conversation). Before that, the request path had only been tested against a fake `fetch` and a scripted reply stream (`scripts/ephemeral/2026-11-12-drive-chat-flow.mjs`).
 - [ ] Future task: the tools milestone gets its own ADR (which tools, where they run, what the CSP has to allow).
 - [ ] Concern: `README.md` is still the template's README; it describes the method, not this project. It is a template-maintained file (`kintsugi.yaml` class `stencil`), so it was left alone.
 - [ ] Future task: OpenRouter's OAuth (PKCE) sign-in would let visitors connect without pasting a key. Not built; the dump says "API keys".
@@ -136,7 +135,7 @@ The project needed a mission; the founder gave one in five sentences. This recor
 
 - [x] Answer QST-HARNESS-SCOPE and QST-PAGES-SOURCE - Owner: prorick (2026-11-12)
 - [x] Push `main` and set Pages source to "GitHub Actions" - Owner: Keel, on the answer to QST-PAGES-SOURCE (2026-11-12)
-- [ ] First real conversation on the deployed page with a real key - Owner: prorick
+- [x] First real conversation on the deployed page with a real key - Owner: prorick (2026-11-12 — "I was able to get it to work!")
 - [ ] Open the tools ADR - Owner: Keel, when prorick says the chat page is good enough to build on
 
 ---
@@ -154,6 +153,12 @@ The project needed a mission; the founder gave one in five sentences. This recor
 - Contributors: prorick, Keel 5.2
 - Changes: QST-HARNESS-SCOPE = C and QST-PAGES-SOURCE = A recorded under Decision; the stream was reshaped into typed events so tools can be added; the page was built, tested, pushed, and deployed to `https://prorick.github.io/my-AI-harness/`; the answer bylines, which the editor had stamped with the unfilled template placeholder, now read `prorick` (the name was taken from the git identity — correct it if it should be something else)
 - Outcome: `Accepted → Partially Implemented` (deployed and working against a scripted stream; not yet tried with a real key)
+
+### Iteration 3 (2026-11-12)
+- Trigger: prorick reported the deployed page working with a real key
+- Contributors: prorick, Keel 5.2
+- Changes: the last open item closed; the next request (show the model's thinking) went to ADR-0002
+- Outcome: `Partially Implemented → Implemented`. Tools remain a later ADR, as decided under scope C.
 
 ---
 
