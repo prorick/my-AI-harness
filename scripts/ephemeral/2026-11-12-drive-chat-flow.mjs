@@ -45,16 +45,26 @@ const FAKE_FETCH = `(() => {
     const pieces = slow
       ? Array.from({ length: 200 }, (_, i) => 'word' + i + ' ')
       : ['Here is ', 'a **bold** ', 'claim and a list:\\n\\n', '- one\\n', '- two\\n\\n', '\`\`\`js\\nconst x = 1;\\n', '\`\`\`\\n\\nDone <b>not html</b>.'];
+    // "think": a reasoning model behind a router — thoughts first (sent both
+    // ways, as OpenRouter does), then the answer, every chunk naming the model
+    // that actually served it (ADR-0002).
+    const think = last.includes('think');
+    const chunks = think
+      ? [
+          ...['**Adding the numbers**\\n\\n', 'Five plus five ', 'is ten.'].map((t) => ({ model: 'fake/thinker-1', choices: [{ delta: { reasoning: t, reasoning_details: [{ type: 'reasoning.text', text: t }] } }] })),
+          { model: 'fake/thinker-1', choices: [{ delta: { content: '5 + 5 = 10.' } }] },
+        ]
+      : pieces.map((p) => ({ choices: [{ delta: { content: p } }] }));
     const enc = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         const onAbort = () => controller.error(new DOMException('Aborted', 'AbortError'));
         init.signal?.addEventListener('abort', onAbort);
         try {
-          for (const p of pieces) {
+          for (const chunk of chunks) {
             if (init.signal?.aborted) return;
-            controller.enqueue(enc.encode('data: ' + JSON.stringify({ choices: [{ delta: { content: p } }] }) + '\\n\\n'));
-            await new Promise((r) => setTimeout(r, slow ? 40 : 30));
+            controller.enqueue(enc.encode('data: ' + JSON.stringify(chunk) + '\\n\\n'));
+            await new Promise((r) => setTimeout(r, think ? 400 : slow ? 40 : 30));
           }
           controller.enqueue(enc.encode('data: [DONE]\\n\\n'));
           controller.close();
@@ -200,6 +210,45 @@ try {
   s = await saved();
   check('deleting the open conversation falls back to the other one', s.conversations.length === 1 && s.activeId === s.conversations[0].id && (await js(`document.getElementById('chat-title').textContent`)) === 'Explain something over two lines');
 
+  // --- thinking (ADR-0002) ----------------------------------------------------
+  const lastReply = `[...document.querySelectorAll('.msg.assistant')].at(-1)`;
+  const notBusy = `!document.getElementById('send').classList.contains('busy')`;
+  await js(`document.getElementById('new-chat').click()`);
+  await say('think about 5 + 5');
+  check('while the model thinks, a “Thinking…” row shows above the waiting dots', await until(`document.querySelector('.thinking .thinking-label')?.textContent === 'Thinking…' && document.querySelector('.msg.assistant .typing') !== null`, 3000));
+  await shot('drive-4-thinking.png');
+  await until(notBusy);
+  check(
+    'once the answer starts, the row reads “Thought for…” with a one-line gist, collapsed',
+    await js(`(() => { const d = document.querySelector('.thinking'); return /^Thought (briefly|for \\d+s)$/.test(d.querySelector('.thinking-label').textContent) && d.querySelector('.thinking-gist').textContent === 'Adding the numbers' && !d.open; })()`),
+    await js(`document.querySelector('.thinking summary').textContent`),
+  );
+  check('the request asked the model to think', JSON.stringify(await js(`window.__requests.at(-1).body.reasoning`)) === '{"enabled":true}');
+  await shot('drive-5-thought-collapsed.png');
+  await js(`document.querySelector('.thinking summary').click()`);
+  check('opening the row shows the thinking in full', await until(`document.querySelector('.thinking').open && document.querySelector('.thinking-body').textContent.includes('Five plus five is ten.')`, 2000));
+  await shot('drive-6-thought-open.png');
+  s = await saved();
+  const thought = s.conversations.find((c) => c.id === s.activeId).messages.at(-1);
+  check('the thinking, its duration and the model that answered are saved with the reply', thought.reasoning === '**Adding the numbers**\n\nFive plus five is ten.' && thought.thinkingMs > 0 && thought.model === 'fake/thinker-1' && thought.content === '5 + 5 = 10.', JSON.stringify({ ms: thought.thinkingMs, model: thought.model }));
+  check('…and the reply names the model that answered, not the router', await js(`${lastReply}.querySelector('.msg-meta').textContent.includes('fake/thinker-1')`));
+
+  await say('and a plain one');
+  await until(`${notBusy} && document.querySelectorAll('.msg.assistant').length === 2`);
+  check('a reply whose model shared no thinking says so, with no empty row', await js(`${lastReply}.querySelector('.thinking') === null && ${lastReply}.querySelector('.msg-meta').textContent.includes('no thinking shared')`));
+  check('a row the reader opened stays open when the page re-renders', await js(`document.querySelector('.thinking').open && document.querySelector('.thinking-body').textContent.includes('Five plus five is ten.')`));
+  check('the follow-up did not send the earlier thinking back to the model', await js(`window.__requests.at(-1).body.messages.every((m) => Object.keys(m).sort().join() === 'content,role')`));
+
+  await js(`(() => { document.getElementById('open-settings').click(); document.getElementById('thinking').checked = false; document.getElementById('settings-form').requestSubmit(); })()`);
+  await say('think once more');
+  await until(`${notBusy} && document.querySelectorAll('.msg.assistant').length === 3`);
+  check('switched off in Settings, the request no longer asks for thinking', await js(`!('reasoning' in window.__requests.at(-1).body)`));
+  check('…but thinking a model shares anyway is still shown', await js(`${lastReply}.querySelector('.thinking') !== null && !${lastReply}.querySelector('.msg-meta').textContent.includes('no thinking shared')`));
+
+  await cdp('Page.reload');
+  await until(`document.querySelectorAll('.msg').length > 0`);
+  check('after a reload both thinking rows are back, collapsed', await js(`document.querySelectorAll('.thinking').length === 2 && [...document.querySelectorAll('.thinking')].every((d) => !d.open)`));
+
   // --- the model list (real network: OpenRouter's public endpoint) -----------
   // A scripted .focus() fires no `focus` event here: a headless page does not
   // hold window focus (see 2026-11-12-probe-model-list.mjs). Dispatch it.
@@ -229,5 +278,10 @@ process.exit(failed ? 1 : 0);
 //   including the real request to OpenRouter's model list.
 // - What it does NOT show: a real chat completion. The reply stream is a
 //   stand-in; no API key was available.
+// - Later the same day, extended for the thinking view (ADR-0002): a "think"
+//   scenario whose stand-in stream sends reasoning first (both as
+//   reasoning_details and as the plain string), then the answer, naming a
+//   served model. 30/30 on the first run. It supported deploying the thinking
+//   view; it does not show that a real model's reasoning arrives in that shape.
 // - Follow-up recorded in docs/TECHNICAL-DEBT.md ("The gate does not open a
 //   browser"): promote this to a real test.
