@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { streamChat, buildMessages, fetchModels, describeError, OpenRouterError } from '../src/js/openrouter.js';
+import { streamChat, streamChatWithRetry, buildMessages, fetchModels, describeError, OpenRouterError } from '../src/js/openrouter.js';
 
 const sse = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
 const delta = (content) => sse({ choices: [{ delta: { content } }] });
@@ -203,4 +203,165 @@ test('the model picker lists text models by name and leaves out speech and image
     { id: 'm/multi', name: 'Multi' },
     { id: 'z/writer', name: 'Zed Writer' },
   ]);
+});
+
+/* ---------- automatic retry (ADR-0004) ---------- */
+
+const UPSTREAM_429 =
+  'openai/gpt-6-luna is temporarily rate-limited upstream. Please retry shortly, or add your own provider key to use your own limits: https://openrouter.ai/workspaces/example/byok';
+const httpError = (status, message, headers = {}) => new Response(JSON.stringify({ error: { code: status, message } }), { status, headers });
+const okReply = (text) => streamingResponse(delta(text) + 'data: [DONE]\n\n', 4096);
+
+// Answers each request with the next response in the list, and counts them.
+function serverThat(...responses) {
+  const server = { calls: 0 };
+  server.fetchImpl = async () => {
+    const next = responses[Math.min(server.calls, responses.length - 1)];
+    server.calls++;
+    return typeof next === 'function' ? next() : next;
+  };
+  return server;
+}
+// A stand-in for waiting: records how long each wait would have been, and returns at once.
+function instantSleep() {
+  const waits = [];
+  return { waits, sleep: async (ms) => { waits.push(ms); } };
+}
+const ask = (server, extra = {}) => streamChatWithRetry({ apiKey: 'k', model: 'openrouter/auto', messages: [], fetchImpl: server.fetchImpl, random: () => 0.5, ...extra });
+
+test('a rate-limited request is tried again by itself, waiting longer each time, and the answer arrives', async () => {
+  const server = serverThat(() => httpError(429, UPSTREAM_429), () => httpError(429, UPSTREAM_429), () => okReply('Penn is in Philadelphia.'));
+  const { waits, sleep } = instantSleep();
+  const all = await events(ask(server, { sleep }));
+
+  assert.equal(server.calls, 3);
+  assert.deepEqual(waits, [1500, 3000]);
+  assert.deepEqual(joined(all), [
+    { type: 'retry', attempt: 1, of: 4, status: 429, delayMs: 1500 },
+    { type: 'retry', attempt: 2, of: 4, status: 429, delayMs: 3000 },
+    { type: 'text', text: 'Penn is in Philadelphia.' },
+  ]);
+});
+
+test('a provider outage or timeout is retried the same way', async () => {
+  for (const status of [408, 502, 503]) {
+    const server = serverThat(() => httpError(status, 'Provider returned error'), () => okReply('ok'));
+    const { sleep } = instantSleep();
+    assert.equal(await collect(ask(server, { sleep })), 'ok', `status ${status}`);
+    assert.equal(server.calls, 2, `status ${status}`);
+  }
+});
+
+test('failures that waiting cannot fix are reported at once, without a retry', async () => {
+  // A wrong key, no credits and an unknown model fail the same way every time.
+  for (const status of [401, 402, 404]) {
+    const server = serverThat(() => httpError(status, 'nope'));
+    const { waits, sleep } = instantSleep();
+    await assert.rejects(events(ask(server, { sleep })), (err) => err.status === status);
+    assert.equal(server.calls, 1, `status ${status}`);
+    assert.deepEqual(waits, []);
+  }
+});
+
+test('after four tries it gives up and says how many times it tried', async () => {
+  const server = serverThat(() => httpError(429, UPSTREAM_429));
+  const { waits, sleep } = instantSleep();
+  let caught;
+  try {
+    await events(ask(server, { sleep }));
+  } catch (err) {
+    caught = err;
+  }
+  assert.equal(server.calls, 4);
+  assert.deepEqual(waits, [1500, 3000, 6000]);
+  assert.match(describeError(caught), /Tried 4 times\./);
+  assert.match(describeError(caught), /not a limit on your key/, 'an upstream limit is named as the provider’s, not the reader’s');
+});
+
+test('once part of the answer is on screen, a failure is reported rather than restarting the answer', async () => {
+  const cutOff = () => streamingResponse(delta('The University of Penn') + sse({ error: { code: 502, message: 'Provider disconnected' }, choices: [] }), 4096);
+  const server = serverThat(cutOff, () => okReply('should never be requested'));
+  const { waits, sleep } = instantSleep();
+  let text = '';
+  await assert.rejects(
+    (async () => {
+      for await (const event of ask(server, { sleep })) if (event.type === 'text') text += event.text;
+    })(),
+    (err) => err.status === 502,
+  );
+  assert.equal(text, 'The University of Penn');
+  assert.equal(server.calls, 1);
+  assert.deepEqual(waits, []);
+});
+
+test('pressing Stop during the wait cancels the retry', async () => {
+  const server = serverThat(() => httpError(429, UPSTREAM_429));
+  const controller = new AbortController();
+  // The real wait, with its real timer: Stop has to end it, not sit it out.
+  const stream = ask(server, { signal: controller.signal });
+  const started = Date.now();
+  await assert.rejects(
+    (async () => {
+      for await (const event of stream) if (event.type === 'retry') setTimeout(() => controller.abort(), 20);
+    })(),
+    (err) => err.name === 'AbortError',
+  );
+  assert.ok(Date.now() - started < 1000, 'ended by Stop, well before the 1.5 s wait was over');
+  assert.equal(server.calls, 1, 'and no further request was made');
+});
+
+test('a server that says how long to wait is believed, up to twenty seconds', async () => {
+  const hinted = serverThat(() => httpError(429, 'Rate limit exceeded', { 'Retry-After': '7' }), () => okReply('ok'));
+  const first = instantSleep();
+  await events(ask(hinted, { sleep: first.sleep }));
+  assert.deepEqual(first.waits, [7000]);
+
+  // A long hint is not obeyed in silence: the wait is capped and, if it still fails, the reader is told.
+  const patient = serverThat(() => httpError(429, 'Rate limit exceeded', { 'Retry-After': '120' }), () => okReply('ok'));
+  const second = instantSleep();
+  await events(ask(patient, { sleep: second.sleep }));
+  assert.deepEqual(second.waits, [20000]);
+});
+
+describe('Regression tests', () => {
+  test('a provider rate limit that arrives inside a 200 stream is recognised as a rate limit, and retried', async () => {
+    // Bug (reported by prorick, 2026-11-12, with a screenshot): the reply to
+    // "Tell me about UPenn" was a bare "openai/gpt-6-luna is temporarily
+    // rate-limited upstream…" box. OpenRouter answers 200 as soon as a provider
+    // accepts the request, so the provider's 429 arrived as an error chunk in
+    // the stream, with the status in `error.code`. The page only looked at the
+    // HTTP status, so it did not know this was a rate limit: no plain-language
+    // explanation, and nothing to base a retry on.
+    // Fixed in the commit that added streamChatWithRetry (ADR-0004).
+    const limitedMidStream = () =>
+      streamingResponse(
+        sse({ model: 'openai/gpt-6-luna', choices: [{ delta: { reasoning: 'Thinking about Penn…' } }] }) +
+          sse({ model: 'openai/gpt-6-luna', provider: 'OpenAI', error: { code: 429, message: UPSTREAM_429, metadata: { error_type: 'rate_limit_exceeded' } }, choices: [{ index: 0, delta: { content: '' }, finish_reason: 'error' }] }),
+        4096,
+      );
+
+    // 1. On its own, the failure now carries its status and reads as what it is.
+    let caught;
+    try {
+      await events(streamChat({ apiKey: 'k', model: 'openrouter/auto', messages: [], fetchImpl: async () => limitedMidStream() }));
+    } catch (err) {
+      caught = err;
+    }
+    assert.ok(caught instanceof OpenRouterError);
+    assert.equal(caught.status, 429);
+    assert.match(describeError(caught), /provider is rate-limiting/);
+
+    // 2. With the retry, the reader gets the answer instead of the error. The
+    // thinking from the failed try is followed by a `retry` event, which is the
+    // page's cue to discard it.
+    const server = serverThat(limitedMidStream, () => okReply('Penn is a private university in Philadelphia.'));
+    const { sleep } = instantSleep();
+    const all = joined(await events(ask(server, { sleep })));
+    assert.deepEqual(
+      all.map((e) => e.type),
+      ['model', 'reasoning', 'retry', 'text'],
+    );
+    assert.equal(all.at(-1).text, 'Penn is a private university in Philadelphia.');
+    assert.equal(server.calls, 2);
+  });
 });

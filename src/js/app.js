@@ -2,7 +2,7 @@
 // and the markdown renderer (render.js). State is one object, saved whole.
 
 import { STORAGE_KEY, DEFAULT_MODEL, createStore, createConversation, appendMessage, removeConversation, recentFirst } from './store.js';
-import { streamChat, fetchModels, buildMessages, describeError } from './openrouter.js';
+import { streamChatWithRetry, fetchModels, buildMessages, describeError, retryReason } from './openrouter.js';
 import { renderMarkdown } from './render.js';
 import { thinkingLabel, gist } from './thinking.js';
 
@@ -152,7 +152,11 @@ function messageEl(message, index, conv) {
   if (message.reasoning) article.append(thinkingEl(message, isLive));
   const body = make('div', 'prose');
   if (message.content) body.append(renderMarkdown(message.content));
-  else if (isLive) body.append(typingDots());
+  else if (isLive) {
+    // Between tries of an automatic retry (ADR-0004), say what is happening.
+    if (active.retry) body.append(make('p', 'retry-note', `${retryReason(active.retry.status)}. Trying again (attempt ${active.retry.attempt + 1} of ${active.retry.of})…`));
+    body.append(typingDots());
+  }
   if (isLive) liveBody = body;
   article.append(body);
 
@@ -254,12 +258,30 @@ async function reply(conv) {
   };
   let stopped = false;
   try {
-    const stream = streamChat({ apiKey: state.settings.apiKey, model, messages: outgoing, reasoning: askedToThink, signal: controller.signal });
+    // Rate limits, timeouts and provider errors are retried a few times before
+    // the reader sees an error (ADR-0004).
+    const stream = streamChatWithRetry({ apiKey: state.settings.apiKey, model, messages: outgoing, reasoning: askedToThink, signal: controller.signal });
     // One model turn. When tools arrive (ADR-0001, QST-HARNESS-SCOPE = C) this
     // is where the loop goes: handle the new event kinds here, run the tool,
     // append its result to `outgoing`, and stream again until the model stops
     // asking.
     for await (const event of stream) {
+      if (event.type === 'retry') {
+        // The failed try is void: drop its thinking and the model it named,
+        // and show a note while waiting for the next one.
+        delete msg.reasoning;
+        delete msg.thinkingMs;
+        thinkingSince = null;
+        msg.model = model;
+        active.retry = event;
+        if (state.activeId === conv.id) renderMessages();
+        continue;
+      }
+      if (active.retry) {
+        // The next try has produced something: the note has done its job.
+        active.retry = null;
+        if (state.activeId === conv.id) renderMessages();
+      }
       if (event.type === 'reasoning') {
         thinkingSince ??= performance.now();
         msg.reasoning = (msg.reasoning ?? '') + event.text;

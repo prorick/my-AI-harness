@@ -5,12 +5,30 @@
 export const API_BASE = 'https://openrouter.ai/api/v1';
 
 export class OpenRouterError extends Error {
-  constructor(message, { status = null, code = null } = {}) {
+  // `status` is the HTTP-style status of the failure whether it arrived as the
+  // response's own status or inside a stream that had already answered 200.
+  // `retryAfterMs` is the server's own "wait this long" hint, when it gave one.
+  constructor(message, { status = null, code = null, retryAfterMs = null } = {}) {
     super(message);
     this.name = 'OpenRouterError';
     this.status = status;
     this.code = code;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+const httpStatus = (code) => (Number.isInteger(code) && code >= 400 && code <= 599 ? code : null);
+
+// `Retry-After` is seconds or an HTTP date. A browser only shows this header
+// to the page when the server lists it in Access-Control-Expose-Headers, so
+// most of the time there is nothing here and the backoff below decides.
+function retryAfterMs(res, now = Date.now()) {
+  const value = res.headers?.get?.('retry-after');
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? null : Math.max(0, date - now);
 }
 
 // What goes on the wire: an optional system prompt, then the turns. Only
@@ -68,7 +86,7 @@ async function errorFromResponse(res) {
   } catch {
     // A non-JSON error body: the status alone has to do.
   }
-  return new OpenRouterError(detail || `OpenRouter answered ${res.status}.`, { status: res.status, code });
+  return new OpenRouterError(detail || `OpenRouter answered ${res.status}.`, { status: res.status, code, retryAfterMs: retryAfterMs(res) });
 }
 
 // The readable reasoning in one stream delta (ADR-0002). OpenRouter documents
@@ -127,7 +145,12 @@ export async function* streamChat({ apiKey, model, messages, reasoning = false, 
       continue;
     }
     if (chunk.error) {
-      throw new OpenRouterError(chunk.error.message || 'The model reported an error.', { code: chunk.error.code ?? null });
+      // Once a provider has accepted the request, OpenRouter has already
+      // answered 200; a failure after that — a provider's rate limit included,
+      // even before the first token — arrives here, with the status it would
+      // have had in `error.code`.
+      const code = chunk.error.code ?? null;
+      throw new OpenRouterError(chunk.error.message || 'The model reported an error.', { status: httpStatus(code), code });
     }
     if (typeof chunk.model === 'string' && chunk.model && chunk.model !== servedModel) {
       servedModel = chunk.model;
@@ -157,10 +180,85 @@ export async function fetchModels({ fetchImpl = globalThis.fetch, signal } = {})
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/* ---------- automatic retry (ADR-0004) ---------- */
+
+// Failures that waiting can fix: rate limits (429 — OpenRouter's or, more
+// often, the provider's), timeouts (408) and provider trouble (5xx). A bad
+// key, no credits, or an unknown model will fail the same way every time.
+export function isRetryable(err) {
+  return err instanceof OpenRouterError && (err.status === 408 || err.status === 429 || (err.status >= 500 && err.status <= 599));
+}
+
+const RETRY_BASE_MS = 1500;
+const RETRY_CAP_MS = 20000;
+
+// How long to wait before retry number `attempt` (1, 2, 3…): 1.5 s, 3 s, 6 s,
+// each nudged up to 25 % either way so that many pages hitting the same limit
+// do not all come back at the same instant. A server hint wins when it is
+// longer, up to the cap — past that, failing and letting the person decide is
+// kinder than a silent half-minute.
+export function retryDelay(attempt, err, random = Math.random) {
+  const backoff = RETRY_BASE_MS * 2 ** (attempt - 1) * (0.75 + random() * 0.5);
+  return Math.round(Math.min(RETRY_CAP_MS, Math.max(backoff, err?.retryAfterMs ?? 0)));
+}
+
+// A sleep that Stop can end.
+function wait(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+// streamChat(), retried. Same events, plus one more kind:
+//   { type: 'retry', attempt, of, status, delayMs }
+// sent before each wait: "try number `attempt` failed with `status`; trying
+// again in `delayMs`; `of` tries in all". Anything received from the failed
+// try (thinking, the model's name) is void — the next try starts clean.
+//
+// A try is only repeated while none of its answer has been shown: once text
+// has reached the reader, a retry would restart the answer under their eyes.
+export async function* streamChatWithRetry({ maxRetries = 3, sleep = wait, random = Math.random, ...request }) {
+  for (let attempt = 1; ; attempt++) {
+    let answered = false;
+    try {
+      for await (const event of streamChat(request)) {
+        if (event.type === 'text') answered = true;
+        yield event;
+      }
+      return;
+    } catch (err) {
+      if (answered || attempt > maxRetries || !isRetryable(err)) {
+        if (err instanceof OpenRouterError) err.attempts = attempt;
+        throw err;
+      }
+      const delayMs = retryDelay(attempt, err, random);
+      yield { type: 'retry', attempt, of: maxRetries + 1, status: err.status, delayMs };
+      await sleep(delayMs, request.signal);
+    }
+  }
+}
+
+// A few words for the "trying again" note shown during a retry wait.
+export function retryReason(status) {
+  if (status === 429) return 'The model is rate-limited';
+  if (status === 408 || status === 504) return 'The request timed out';
+  return 'The provider had a problem';
+}
+
 // One sentence a person can act on.
 export function describeError(err) {
   if (err instanceof OpenRouterError) {
     const detail = err.message ? ` (${err.message})` : '';
+    const tried = err.attempts > 1 ? ` Tried ${err.attempts} times.` : '';
     switch (err.status) {
       case 401:
         return `OpenRouter did not accept the API key. Check it in Settings.${detail}`;
@@ -169,9 +267,14 @@ export function describeError(err) {
       case 404:
         return `OpenRouter does not know this model. Pick another one.${detail}`;
       case 429:
-        return `Rate limited. Wait a moment, then retry.${detail}`;
+        // OpenRouter words a provider-side limit as "rate-limited upstream":
+        // the provider is throttling OpenRouter's shared capacity for that
+        // model. Worth saying, because the natural guess is "my key ran out".
+        return /upstream/i.test(err.message)
+          ? `The model’s provider is rate-limiting requests right now; this is not a limit on your key.${tried} Wait a moment, then retry.${detail}`
+          : `Rate limited.${tried} Wait a moment, then retry.${detail}`;
       default:
-        return err.message || 'OpenRouter reported an error.';
+        return `${err.message || 'OpenRouter reported an error.'}${tried}`;
     }
   }
   if (err instanceof TypeError) return 'Could not reach OpenRouter. Check your connection, then retry.';

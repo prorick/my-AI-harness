@@ -233,6 +233,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 }
 .msg-error span { flex: 1; }
 
+.prose .retry-note { margin: 0 0 2px; color: var(--muted); font-size: 14.5px; }
+
 .typing { display: inline-flex; gap: 5px; padding: 8px 0; }
 .typing i {
   width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
